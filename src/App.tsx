@@ -9,10 +9,17 @@ import { Review } from './pages/Review';
 import { Settings } from './pages/Settings';
 import { ProjectProvider } from './store/ProjectContext';
 
+/** Vite base ends with `/`; React Router basename should not. */
+function routerBasename(): string | undefined {
+  const raw = import.meta.env.BASE_URL || '/';
+  const trimmed = raw.replace(/\/$/, '');
+  return trimmed === '' || trimmed === '/' ? undefined : trimmed;
+}
+
 export default function App() {
   return (
     <ProjectProvider>
-      <BrowserRouter>
+      <BrowserRouter basename={routerBasename()}>
         <Routes>
           <Route element={<Layout />}>
             <Route index element={<Dashboard />} />

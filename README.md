@@ -83,8 +83,20 @@ npm run build
 Preview the build:
 
 ```bash
-npm run preview
+npm run preview -- --host 127.0.0.1 --port 8780
 ```
+
+### GitHub Pages (project site)
+
+Live (after Actions deploy): **https://aichrisz.github.io/project-board/**
+
+```bash
+npm run build:pages   # sets base /project-board/ + SPA 404.html
+```
+
+CI: `.github/workflows/pages.yml` builds with `VITE_BASE=/project-board/` on every push to `main`.
+
+Repo: https://github.com/aichrisz/project-board
 
 Service worker registration runs only in production builds (`import.meta.env.PROD`).
 

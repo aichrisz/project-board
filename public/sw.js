@@ -1,12 +1,15 @@
-/* Project Board — minimal offline shell service worker */
-const CACHE = 'project-board-shell-v1';
+/* Project Board — minimal offline shell service worker (base-path aware) */
+const CACHE = 'project-board-shell-v2';
+const SCOPE = self.registration.scope; // e.g. https://user.github.io/project-board/
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((cache) =>
-      cache.addAll(['/', '/index.html', '/manifest.webmanifest', '/favicon.svg']),
-    ),
-  );
+  const shell = [
+    SCOPE,
+    SCOPE + 'index.html',
+    SCOPE + 'manifest.webmanifest',
+    SCOPE + 'favicon.svg',
+  ];
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(shell).catch(() => undefined)));
   self.skipWaiting();
 });
 
@@ -27,7 +30,6 @@ self.addEventListener('fetch', (event) => {
     caches.match(request).then((cached) => {
       const network = fetch(request)
         .then((response) => {
-          // Cache successful same-origin navigations and static assets
           if (
             response &&
             response.ok &&
@@ -44,7 +46,6 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() => cached);
 
-      // Prefer network; fall back to cache for offline
       return network.then((res) => res || cached).catch(() => cached);
     }),
   );
