@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Project Board — personal project inventory dashboard" />
+    <meta name="theme-color" content="#0f1218" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Project Board</title>
+    <!-- Apply theme before paint to reduce flash -->
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('project-board-v1');
+          var mode = 'system';
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            if (parsed && parsed.settings && parsed.settings.theme) {
+              mode = parsed.settings.theme;
+            }
+          }
+          var resolved = mode;
+          if (mode === 'system') {
+            resolved =
+              window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: light)').matches
+                ? 'light'
+                : 'dark';
+          }
+          document.documentElement.setAttribute('data-theme', resolved);
+          document.documentElement.style.colorScheme = resolved;
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
