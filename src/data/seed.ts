@@ -63,7 +63,7 @@ Local path: \`/root/projects/abel-project-dashboard\`
       { id: 'sc-1', title: 'PRD + MVP plan', done: true, order: 1 },
       { id: 'sc-2', title: 'v0.1 list/editor/export', done: true, order: 2 },
       { id: 'sc-3', title: 'v0.2 PWA + print + duplicate', done: true, order: 3 },
-      { id: 'sc-4', title: 'GitHub + Pages (when PAT allows create)', done: false, order: 4 },
+      { id: 'sc-4', title: 'GitHub + Pages live', done: true, order: 4 },
     ],
     notes_md: `**Shift Cockpit** v0.2.
 
@@ -78,6 +78,16 @@ Local path: \`/root/projects/hotel-shift-cockpit\`
         id: 'sc-link-path',
         label: 'Local path',
         url: '/root/projects/hotel-shift-cockpit',
+      },
+      {
+        id: 'sc-link-github',
+        label: 'GitHub',
+        url: 'https://github.com/aichrisz/shift-cockpit',
+      },
+      {
+        id: 'sc-link-pages',
+        label: 'GitHub Pages',
+        url: 'https://aichrisz.github.io/shift-cockpit/',
       },
     ],
     tags: ['hotel', 'azubi', 'handover', 'local-first'],
