@@ -51,6 +51,44 @@ Local path: \`/root/projects/abel-project-dashboard\`
     starred: true,
   },
   {
+    id: 'shift-cockpit',
+    title: 'Shift Cockpit',
+    slug: 'shift-cockpit',
+    type: 'tool',
+    status: 'in_progress',
+    summary:
+      'Local-first hotel shift handover for Azubi Hotelfach — notes, checklist, tip split, Markdown export, DE/EN/ID. v0.2 PWA lite.',
+    progress_pct: 0,
+    steps: [
+      { id: 'sc-1', title: 'PRD + MVP plan', done: true, order: 1 },
+      { id: 'sc-2', title: 'v0.1 list/editor/export', done: true, order: 2 },
+      { id: 'sc-3', title: 'v0.2 PWA + print + duplicate', done: true, order: 3 },
+      { id: 'sc-4', title: 'GitHub + Pages (when PAT allows create)', done: false, order: 4 },
+    ],
+    notes_md: `**Shift Cockpit** v0.2.
+
+Local path: \`/root/projects/hotel-shift-cockpit\`
+
+- Storage: \`shift-cockpit-v1\`
+- Preview port **8781**
+- UI languages: DE / EN / ID
+- Product brand generic (no personal name)`,
+    links: [
+      {
+        id: 'sc-link-path',
+        label: 'Local path',
+        url: '/root/projects/hotel-shift-cockpit',
+      },
+    ],
+    tags: ['hotel', 'azubi', 'handover', 'local-first'],
+    deadline: null,
+    stack: ['react', 'typescript', 'vite'],
+    created_at: '2026-07-18T00:00:00.000Z',
+    updated_at: now,
+    started_at: '2026-07-18T00:12:00.000Z',
+    starred: true,
+  },
+  {
     id: 'orbit-tap',
     title: 'Orbit Tap',
     slug: 'orbit-tap',
@@ -271,6 +309,7 @@ Keep notes operational — not a second product UI.`,
 
 - Vocab / study aids (in progress)
 - Related game: **Lobby Chaos** at \`/root/projects/lobby-chaos\` (playable practice)
+- Related tool: **Shift Cockpit** at \`/root/projects/hotel-shift-cockpit\` (shift handover MVP)
 - No single code repo required; may live across notes + small tools`,
     links: [],
     tags: ['hotelfach', 'azubi', 'vocab'],
