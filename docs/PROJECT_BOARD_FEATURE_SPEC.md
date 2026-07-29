@@ -3,8 +3,8 @@
 **Document type:** Portable product specification  
 **Audience:** Any AI or engineer implementing, reviewing, or extending the app  
 **Product name:** Project Board  
-**Current version:** 0.8.0 (“Steady”)  
-**Last updated:** 2026-07-15  
+**Current version:** 0.8.1 (“Steady”, reliability patch)  
+**Last updated:** 2026-07-29  
 
 This document is **self-contained**. It describes *what the product is* and *what features exist*. It does **not** depend on a specific host, owner name, or agent toolchain.
 
@@ -199,13 +199,21 @@ Use this as a capability checklist. Versions are incremental; **current ship = a
 4. **Duplicate project** — clone as new id; title suffix ` (copy)`; status `idea`; steps cloned with `done: false`; `starred: false`  
 5. **Link chips** — http(s) open with `rel="noopener noreferrer"`; non-http path-like → copy only; block dangerous schemes; up to 2 chips on dashboard cards  
 
-### 6.8 v0.8 — Steady (current)
+### 6.8 v0.8 — Steady
 
 1. **Weekly review** — route `/review`; KPI strip; sections overdue / due soon / stale in_progress / no steps; rule-based suggested actions; soft-archive idle bulk; snapshot + export; shortcut `r`  
 2. **Board keyboard a11y** — focusable cards; ←→ (or h/l) change status; ↑↓ (or k/j) move focus; Enter/Space open detail; aria-live; ignore keys while typing  
 3. **Hygiene tools** (Settings) — counts (no steps, idle, overdue, empty tags); soft-archive idle; no-steps links; copy hygiene report  
 4. **Step bulk** — mark all done / clear all done / remove completed steps (confirm); one activity event per bulk action  
 5. **Import preview** — parse first; show counts, overlapping ids, sample titles; Cancel / Replace all / Merge by id  
+
+### 6.9 v0.8.1 — Reliability (current)
+
+1. **Strict import validation** — untrusted import files are validated at the file/import boundary before any preview or apply. Rejects non-object roots, unsupported versions, malformed project/step/link shapes, blank or duplicate ids, out-of-allow-list `status` / `type` / `theme`, invalid dates, out-of-range `progress_pct` and `idleDays`  
+2. **Bounded inputs** — documented caps: 5 MB per file, 5000 projects, 500 steps and 500 links per project, 50 tags/stack entries, per-field length limits  
+3. **User-safe errors** — rejection messages name the offending field and are free of stack traces or source internals  
+4. **Additive migration preserved** — valid v1 exports still parse; missing `starred` / `started_at` still default safely  
+5. **Regression tests** — dependency-free `node:test` suite covering the import boundary and a guard against known router advisory ranges  
 
 ---
 
@@ -288,7 +296,8 @@ An implementation is “feature-complete for 0.7” if:
 - [ ] Focus chip + URL work  
 - [ ] Duplicate creates idea copy with unchecked steps  
 - [ ] Link chips safe for http(s) / path-like  
-- [ ] Footer/chrome shows **v0.8.0**  
+- [ ] Footer/chrome shows **v0.8.1**  
+- [ ] Import rejects malformed, unsafe, or oversized files with a plain-language message  
 - [ ] `/review` weekly review works  
 - [ ] Board keyboard status/focus works  
 - [ ] Import preview before apply  
@@ -330,4 +339,4 @@ Possible later themes (only if product owner approves a plan):
 
 ---
 
-*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.7.*
+*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.8.1.*
