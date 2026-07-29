@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router';
 import { BoardColumn } from '../components/BoardColumn';
 import { sortProjects } from '../lib/sort';
 import { useProjects } from '../store/ProjectContext';

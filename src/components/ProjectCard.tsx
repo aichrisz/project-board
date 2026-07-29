@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import type { Project } from '../types';
 import { STATUS_LABELS, TYPE_LABELS } from '../types';
 import { HealthBadges } from './HealthBadges';

@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { EmptyState } from '../components/EmptyState';
 import { useProjects } from '../store/ProjectContext';
 import type { ActivityType } from '../types';

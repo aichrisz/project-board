@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router';
 import { DueSoonStrip } from '../components/DueSoonStrip';
 import { EmptyState } from '../components/EmptyState';
 import { Filters, type FilterState } from '../components/Filters';

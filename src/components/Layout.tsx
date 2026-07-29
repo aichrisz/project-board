@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { openWeeklySnapshot } from '../lib/snapshot';
 import { useProjects } from '../store/ProjectContext';
 import { APP_VERSION } from '../version';

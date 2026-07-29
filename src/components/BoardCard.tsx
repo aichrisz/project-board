@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import type { Project } from '../types';
 import { TYPE_LABELS } from '../types';
 import { HealthBadges } from './HealthBadges';
