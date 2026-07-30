@@ -4,7 +4,7 @@ A **local-first** personal project inventory dashboard. Track status, progress, 
 
 - **Product name:** Project Board  
 - **Stack:** Vite + React + TypeScript  
-- **Version:** 0.8.1  
+- **Version:** 0.8.1
 - **Storage:** browser `localStorage` key `project-board-v1`  
 - **UI language:** English  
 

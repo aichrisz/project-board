@@ -3,8 +3,8 @@
 **Document type:** Portable product specification  
 **Audience:** Any AI or engineer implementing, reviewing, or extending the app  
 **Product name:** Project Board  
-**Current version:** 0.8.1 (“Steady”, reliability patch)  
-**Last updated:** 2026-07-29  
+**Current version:** 0.8.1 (“Steady”, reliability patch)\
+**Last updated:** 2026-07-29
 
 This document is **self-contained**. It describes *what the product is* and *what features exist*. It does **not** depend on a specific host, owner name, or agent toolchain.
 
@@ -209,11 +209,11 @@ Use this as a capability checklist. Versions are incremental; **current ship = a
 
 ### 6.9 v0.8.1 — Reliability (current)
 
-1. **Strict import validation** — untrusted import files are validated at the file/import boundary before any preview or apply. Rejects non-object roots, unsupported versions, malformed project/step/link shapes, blank or duplicate ids, out-of-allow-list `status` / `type` / `theme`, invalid dates, out-of-range `progress_pct` and `idleDays`  
-2. **Bounded inputs** — documented caps: 5 MB per file, 5000 projects, 500 steps and 500 links per project, 50 tags/stack entries, per-field length limits  
-3. **User-safe errors** — rejection messages name the offending field and are free of stack traces or source internals  
-4. **Additive migration preserved** — valid v1 exports still parse; missing `starred` / `started_at` still default safely  
-5. **Regression tests** — dependency-free `node:test` suite covering the import boundary and a guard against known router advisory ranges  
+1. **Strict import validation** — untrusted import files are validated at the file/import boundary before any preview or apply. Rejects non-object roots, unsupported versions, malformed project/step/link shapes, blank or duplicate ids, out-of-allow-list `status` / `type` / `theme`, invalid dates, out-of-range `progress_pct` and `idleDays`
+2. **Bounded inputs** — documented caps: 5 MB per file, 5000 projects, 500 steps and 500 links per project, 50 tags/stack entries, per-field length limits
+3. **User-safe errors** — rejection messages name the offending field and are free of stack traces or source internals
+4. **Additive migration preserved** — valid v1 exports still parse; missing `starred` / `started_at` still default safely
+5. **Regression tests** — dependency-free `node:test` suite covering the import boundary and a guard against known router advisory ranges
 
 ---
 
@@ -296,8 +296,8 @@ An implementation is “feature-complete for 0.7” if:
 - [ ] Focus chip + URL work  
 - [ ] Duplicate creates idea copy with unchecked steps  
 - [ ] Link chips safe for http(s) / path-like  
-- [ ] Footer/chrome shows **v0.8.1**  
-- [ ] Import rejects malformed, unsafe, or oversized files with a plain-language message  
+- [ ] Footer/chrome shows **v0.8.1**
+- [ ] Import rejects malformed, unsafe, or oversized files with a plain-language message
 - [ ] `/review` weekly review works  
 - [ ] Board keyboard status/focus works  
 - [ ] Import preview before apply  

@@ -1,7 +1,7 @@
 # Project Board v0.8.1 — Reliability Plan
 
-**Status:** Approved by Abel on 2026-07-29  
-**Implementer:** OpenCode · `abel-claude/kr/claude-opus-5`  
+**Status:** Approved by Abel on 2026-07-29\
+**Implementer:** OpenCode · `abel-claude/kr/claude-opus-5`\
 **Scope:** Reliability/security patch; no feature expansion, no push/deploy.
 
 ## Goal
