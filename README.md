@@ -4,9 +4,17 @@ A **local-first** personal project inventory dashboard. Track status, progress, 
 
 - **Product name:** Project Board  
 - **Stack:** Vite + React + TypeScript  
-- **Version:** 0.8.1
+- **Version:** 0.8.2
 - **Storage:** browser `localStorage` key `project-board-v1`  
 - **UI language:** English  
+
+## Deployment (v0.8.2)
+
+- **Canonical publish flow** — `npm run build:pages`, then publish the **contents of `dist/`** to the **root of the `gh-pages` branch**
+- **`.nojekyll` is reproducible** — Vite copies tracked `public/.nojekyll` to `dist/.nojekyll`; publishing the contents of `dist/` places it at the `gh-pages` root
+- **`dist/404.html`** is the SPA fallback (a copy of `index.html`)
+- **Known behavior** — under legacy GitHub Pages, a direct link to a client-side route returns **HTTP 404** while the fallback app body is served, so the app still renders and routes correctly
+- No GitHub Actions deploy workflow; publishing is a manual branch update
 
 ## Reliability (v0.8.1)
 
@@ -106,13 +114,22 @@ app's extensionless relative TypeScript imports. Test files are typechecked by
 
 ### GitHub Pages (project site)
 
-Live (after Actions deploy): **https://aichrisz.github.io/project-board/**
+Live: **https://aichrisz.github.io/project-board/**
 
 ```bash
 npm run build:pages   # sets base /project-board/ + SPA 404.html
 ```
 
-CI: `.github/workflows/pages.yml` builds with `VITE_BASE=/project-board/` on every push to `main`.
+Publish steps:
+
+1. Run `npm run build:pages` (sets `VITE_BASE=/project-board/` and copies `dist/index.html` to `dist/404.html`).
+2. Publish the **contents of `dist/`** to the **root** of the `gh-pages` branch (not into a subdirectory).
+3. Keep `.nojekyll` present at the `gh-pages` root so Jekyll does not strip `_`-prefixed asset paths.
+
+`dist/404.html` is the SPA fallback. Under legacy GitHub Pages, opening a deep
+link such as `/project-board/board` directly returns an **HTTP 404 status** while
+the fallback app body is served; the router then renders the requested view. The
+status code cannot be changed on static Pages hosting.
 
 Repo: https://github.com/aichrisz/project-board
 

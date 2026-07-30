@@ -2,6 +2,38 @@
 
 All notable changes to Project Board. Local-first single-user app; dates are UTC.
 
+## 0.8.2 — Deployment (2026-07-30)
+
+### Changed
+
+- **Canonical GitHub Pages strategy.** Publishing is now a manual branch update:
+  run `npm run build:pages`, then publish the **contents of `dist/`** to the
+  **root of the `gh-pages` branch**. Vite copies tracked `public/.nojekyll` to
+  `dist/.nojekyll`, so publishing the full contents of `dist/` places it at that
+  root and prevents Jekyll from stripping asset paths.
+- **Documented SPA fallback behavior.** `dist/404.html` is a copy of
+  `index.html` and serves as the SPA fallback. Under legacy GitHub Pages, a
+  direct link to a client-side route returns an **HTTP 404 status** while the
+  fallback app body is served, so the app still renders the requested view. The
+  status code cannot be changed on static Pages hosting.
+- Documentation now names `react-router` rather than the removed
+  `react-router-dom` compatibility package.
+
+### Removed
+
+- **GitHub Actions Pages workflow.** `.github/workflows/pages.yml` and the
+  README/spec claims of an automatic build-and-deploy on every push to `main`
+  were removed. There is no CI deploy; the live site updates only when `gh-pages`
+  is published manually.
+
+### Unchanged
+
+- No dependency, script, or lockfile changes. This release is documentation and
+  release metadata only.
+- Storage keys `project-board-v1` and `project-board-activity-v1`.
+- No cloud, auth, telemetry, or backend functionality.
+- Version chrome shows **v0.8.2**.
+
 ## 0.8.1 — Reliability (2026-07-29)
 
 ### Fixed
@@ -36,7 +68,8 @@ All notable changes to Project Board. Local-first single-user app; dates are UTC
 
 - `npm test` runs a dependency-free `node:test` suite (45 cases) over the import
   boundary and the router advisory guard.
-- Tracked `.github/workflows/pages.yml` as an intentional source file.
+- Tracked `.github/workflows/pages.yml` as an intentional source file. (That
+  workflow was later removed in 0.8.2 in favor of manual `gh-pages` publishing.)
 
 ### Unchanged
 
