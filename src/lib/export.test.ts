@@ -3,7 +3,9 @@ import { describe, it } from 'node:test';
 
 import {
   MAX_IMPORT_BYTES,
+  ImportValidationError,
   parseImportJson,
+  readImportFileText,
   summarizeImport,
   toExportJson,
 } from './export';
@@ -92,6 +94,67 @@ describe('parseImportJson — root and size guards', () => {
   it('documents a sane byte cap', () => {
     assert.ok(MAX_IMPORT_BYTES >= 1_000_000);
     assert.ok(MAX_IMPORT_BYTES <= 20_000_000);
+  });
+
+  it('measures the cap in UTF-8 bytes, not string length', () => {
+    // Each "の" is 3 UTF-8 bytes, so this string is under the cap by
+    // JS string length but well over it in real bytes.
+    const multibyte = 'の'.repeat(Math.ceil(MAX_IMPORT_BYTES / 2));
+    assert.ok(multibyte.length < MAX_IMPORT_BYTES);
+    assert.ok(Buffer.byteLength(multibyte, 'utf8') > MAX_IMPORT_BYTES);
+    assert.throws(
+      () => parseImportJson(json(makeBlob([makeProject({ notes_md: multibyte })]))),
+      /too large/i,
+    );
+  });
+
+  it('still accepts multibyte content that fits within the byte cap', () => {
+    const notes = 'の'.repeat(1000);
+    const parsed = parseImportJson(
+      json(makeBlob([makeProject({ notes_md: notes })])),
+    );
+    assert.equal(parsed.projects[0].notes_md, notes);
+  });
+});
+
+describe('readImportFileText — File size boundary', () => {
+  type FakeFile = { size: number; text: () => Promise<string> };
+
+  function fakeFile(size: number, contents = '{}'): FakeFile & { calls: number } {
+    const file = {
+      size,
+      calls: 0,
+      text() {
+        file.calls += 1;
+        return Promise.resolve(contents);
+      },
+    };
+    return file;
+  }
+
+  it('rejects an oversized File without calling text()', async () => {
+    const file = fakeFile(MAX_IMPORT_BYTES + 1);
+    await assert.rejects(
+      () => readImportFileText(file as unknown as File),
+      (err: unknown) => {
+        assert.ok(err instanceof ImportValidationError);
+        assert.match(err.message, /too large/i);
+        return true;
+      },
+    );
+    assert.equal(file.calls, 0, 'text() must not be called for oversized files');
+  });
+
+  it('reads a File that is within the byte cap', async () => {
+    const file = fakeFile(10, '{"ok":true}');
+    assert.equal(await readImportFileText(file as unknown as File), '{"ok":true}');
+    assert.equal(file.calls, 1);
+  });
+
+  it('reads a File exactly at the byte cap', async () => {
+    const file = fakeFile(MAX_IMPORT_BYTES, '{}');
+    assert.equal(await readImportFileText(file as unknown as File), '{}');
+    assert.equal(file.calls, 1);
   });
 
   it('rejects invalid JSON with a user-safe message', () => {
@@ -209,6 +272,77 @@ describe('parseImportJson — project shape guards', () => {
       () =>
         parseImportJson(json(makeBlob([makeProject({ deadline: '13/32' })]))),
       /deadline/i,
+    );
+  });
+
+  it('rejects impossible calendar dates that Date.parse would normalize', () => {
+    for (const value of [
+      '2026-02-30',
+      '2026-02-31',
+      '2025-02-29',
+      '2026-04-31',
+      '2026-06-31',
+      '2026-13-01',
+      '2026-00-10',
+      '2026-01-00',
+      '2026-01-32',
+    ]) {
+      assert.throws(
+        () => parseImportJson(json(makeBlob([makeProject({ deadline: value })]))),
+        /deadline/i,
+        `expected ${value} to be rejected`,
+      );
+    }
+  });
+
+  it('rejects impossible calendar dates inside ISO timestamps', () => {
+    for (const value of [
+      '2026-02-30T00:00:00.000Z',
+      '2026-11-31T12:00:00.000Z',
+      '2027-02-29T08:30:00Z',
+    ]) {
+      assert.throws(
+        () =>
+          parseImportJson(json(makeBlob([makeProject({ created_at: value })]))),
+        /created_at/i,
+        `expected ${value} to be rejected`,
+      );
+    }
+  });
+
+  it('keeps accepting valid v1 export date formats', () => {
+    for (const value of [
+      '2026-07-20',
+      '2024-02-29',
+      '2000-02-29',
+      '2026-12-31',
+      '2026-01-01T00:00:00.000Z',
+      '2026-06-30T23:59:59Z',
+      '2026-03-15T10:20:30+02:00',
+      '2026-03-15T10:20:30.123-05:00',
+    ]) {
+      const parsed = parseImportJson(
+        json(
+          makeBlob([
+            makeProject({ deadline: value, created_at: '2026-01-01T00:00:00.000Z' }),
+          ]),
+        ),
+      );
+      assert.equal(parsed.projects[0].deadline, value, `expected ${value} to pass`);
+    }
+  });
+
+  it('rejects impossible calendar dates in settings timestamps', () => {
+    assert.throws(
+      () =>
+        parseImportJson(
+          json({
+            version: 1,
+            projects: [],
+            settings: { lastExportAt: '2026-02-30T00:00:00.000Z' },
+          }),
+        ),
+      /lastExportAt/i,
     );
   });
 

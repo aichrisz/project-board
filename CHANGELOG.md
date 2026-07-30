@@ -13,9 +13,13 @@ All notable changes to Project Board. Local-first single-user app; dates are UTC
   Rejected now: non-object roots, unsupported versions, malformed project, step,
   and link shapes, blank or duplicate ids, unknown `status` / `type` / `theme`
   values, invalid dates, and out-of-range `progress_pct` or `idleDays`.
+  Date checks validate the calendar, so impossible dates like `2026-02-30` are
+  rejected instead of being silently normalized to `2026-03-02`.
 - **Bounded inputs.** Documented caps stop oversized files from locking up the
   tab: 5 MB per file, 5000 projects, 500 steps and 500 links per project,
-  50 tags or stack entries, plus per-field length limits.
+  50 tags or stack entries, plus per-field length limits. The file cap is
+  measured in UTF-8 bytes, and a `File` over the cap is rejected by its reported
+  size before its contents are read into memory.
 - **Clearer errors.** Import failures name the offending field in plain language
   and no longer surface raw `JSON.parse` text or source internals.
 - **Router security advisory.** Upgraded `react-router` to 8.3.0, the first
@@ -30,7 +34,7 @@ All notable changes to Project Board. Local-first single-user app; dates are UTC
 
 ### Added
 
-- `npm test` runs a dependency-free `node:test` suite (36 cases) over the import
+- `npm test` runs a dependency-free `node:test` suite (45 cases) over the import
   boundary and the router advisory guard.
 - Tracked `.github/workflows/pages.yml` as an intentional source file.
 

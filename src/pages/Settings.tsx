@@ -8,6 +8,7 @@ import {
 } from '../lib/exportAge';
 import {
   parseImportJson,
+  readImportFileText,
   summarizeImport,
   type ImportSummary,
 } from '../lib/export';
@@ -61,7 +62,7 @@ export function Settings() {
     setImportPreview(null);
     setImportRaw(null);
     try {
-      const text = await file.text();
+      const text = await readImportFileText(file);
       const incoming = parseImportJson(text);
       const current: StorageBlob = {
         version: 1,

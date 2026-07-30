@@ -1,7 +1,11 @@
 import type { AppSettings, StorageBlob } from '../types';
 import { validateImportBlob } from './importValidation';
 
-export { MAX_IMPORT_BYTES, ImportValidationError } from './importValidation';
+export {
+  MAX_IMPORT_BYTES,
+  ImportValidationError,
+  readImportFileText,
+} from './importValidation';
 
 export function toExportJson(blob: StorageBlob): string {
   return JSON.stringify(blob, null, 2);

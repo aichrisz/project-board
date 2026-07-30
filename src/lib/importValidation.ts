@@ -15,7 +15,7 @@ import {
 } from '../types';
 import { migrateProject } from './storage';
 
-/** Hard cap on import payload size (5 MB of UTF-16 text) to bound parse work. */
+/** Hard cap on import payload size (5 MB of UTF-8 encoded text) to bound parse work. */
 export const MAX_IMPORT_BYTES = 5_000_000;
 /** Hard cap on projects per import file. */
 export const MAX_IMPORT_PROJECTS = 5000;
@@ -46,6 +46,30 @@ function fail(message: string): never {
   throw new ImportValidationError(message);
 }
 
+function failTooLarge(): never {
+  fail(
+    `Import failed: file is too large (limit ${Math.floor(MAX_IMPORT_BYTES / 1_000_000)} MB).`,
+  );
+}
+
+const utf8Encoder = new TextEncoder();
+
+/** Actual UTF-8 byte length, not JS string length (UTF-16 code units). */
+export function utf8ByteLength(text: string): number {
+  return utf8Encoder.encode(text).length;
+}
+
+/**
+ * Read import text from a File, rejecting oversized files by their reported
+ * byte size *before* the contents are pulled into memory.
+ */
+export async function readImportFileText(file: File): Promise<string> {
+  if (typeof file?.size === 'number' && file.size > MAX_IMPORT_BYTES) {
+    failTooLarge();
+  }
+  return file.text();
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -69,13 +93,44 @@ function requireString(
   return value;
 }
 
+/**
+ * ISO-8601 calendar date, optionally with a time part and offset.
+ * Groups: 1=year, 2=month, 3=day. Matches the formats v1 exports produce
+ * (`YYYY-MM-DD` deadlines and `Date#toISOString()` timestamps).
+ */
+const ISO_DATE_RE =
+  /^(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
+
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+/**
+ * True only for real calendar dates. `Date.parse` alone is not enough: it
+ * normalizes impossible dates such as 2026-02-30 into 2026-03-02.
+ */
+export function isValidCalendarDateString(text: string): boolean {
+  const match = ISO_DATE_RE.exec(text);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12) return false;
+  const maxDay =
+    month === 2 && isLeapYear(year) ? 29 : DAYS_IN_MONTH[month - 1];
+  if (day < 1 || day > maxDay) return false;
+  return !Number.isNaN(Date.parse(text));
+}
+
 function requireIsoDate(
   value: unknown,
   where: string,
   field: string,
 ): string {
   const text = requireString(value, where, field, MAX_SHORT_TEXT_CHARS);
-  if (Number.isNaN(Date.parse(text))) {
+  if (!isValidCalendarDateString(text)) {
     fail(`${where}: "${field}" must be a valid date.`);
   }
   return text;
@@ -299,10 +354,8 @@ export function validateImportBlob(text: string): StorageBlob {
   if (!text.trim()) {
     fail('Import failed: the file is empty.');
   }
-  if (text.length > MAX_IMPORT_BYTES) {
-    fail(
-      `Import failed: file is too large (limit ${Math.floor(MAX_IMPORT_BYTES / 1_000_000)} MB).`,
-    );
+  if (utf8ByteLength(text) > MAX_IMPORT_BYTES) {
+    failTooLarge();
   }
 
   let parsed: unknown;
