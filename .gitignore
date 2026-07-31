@@ -30,3 +30,6 @@ dist-ssr
 
 # agent session prompts (host-specific)
 GROK_BUILD_PROMPT.md
+
+# Isolated Git worktrees (never part of the project source tree)
+.worktrees/
