@@ -4,9 +4,19 @@ A **local-first** personal project inventory dashboard. Track status, progress, 
 
 - **Product name:** Project Board  
 - **Stack:** Vite + React + TypeScript  
-- **Version:** 0.8.2
+- **Version:** 0.9.0
 - **Storage:** browser `localStorage` key `project-board-v1`  
 - **UI language:** English  
+
+## Accessibility & mobile (v0.9)
+
+- **Modal focus lifecycle** — the mobile menu sheet and the `?` shortcuts dialog share one primitive (`src/hooks/useDialogFocus.ts`): focus moves into the surface on open, `Tab` / `Shift+Tab` wrap inside it, `Escape` closes, and focus returns to whatever opened it
+- **Board keyboard** — the Board claims its own keys (←→ / `h` `l` status, ↑↓ / `k` `j` focus, Enter/Space open) before resolving the action, so a key pressed at the first or last column/card no longer scrolls the page or activates the card; keys are still ignored while typing
+- **Mobile Board affordance** — under `max-width: 767px`, and only when the columns really overflow, the Board shows static hint text that swiping sideways reveals more statuses and that status can also be changed by keyboard or from a project's detail page. It is not focusable, not a button, not an `aria-live` region, and does not intercept touches; it retires after a short horizontal scroll and is never stored
+- **Narrow empty state** — reserved board height is compact on phones so the empty-state `Create one` action stays above the fold. Desktop layout and the Board's intentional internal horizontal scroll are unchanged
+- **Pure decision helpers** — `src/lib/boardKeyboard.ts`, `src/lib/dialogFocus.ts`, and `src/lib/boardScrollHint.ts` keep the keyboard, focus, and hint-gating rules DOM-free and unit-tested; `npm test` covers 99 cases
+- **No new dependencies** — no runtime or dev dependency added, removed, or upgraded; no storage schema, backend, telemetry, or Pages change
+- **Version chrome** — footer shows **v0.9.0**
 
 ## Deployment (v0.8.2)
 

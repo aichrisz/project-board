@@ -3,9 +3,9 @@
 **Document type:** Portable product specification  
 **Audience:** Any AI or engineer implementing, reviewing, or extending the app  
 **Product name:** Project Board  
-**Current version:** 0.8.2 (documentation / deployment patch)\
-**Current shipped capability:** all features through **v0.8.1**\
-**Last updated:** 2026-07-30
+**Current version:** 0.9.0 (accessibility & mobile field use)\
+**Current shipped capability:** all features through **v0.9.0**\
+**Last updated:** 2026-07-31
 
 This document is **self-contained**. It describes *what the product is* and *what features exist*. It does **not** depend on a specific host, owner name, or agent toolchain.
 
@@ -132,7 +132,7 @@ Activity may be stored separately or alongside depending on implementation; proj
 
 ## 6. Feature inventory by version
 
-Use this as a capability checklist. Versions are incremental; **current ship = all rows through 0.8.1**. Version 0.8.2 adds no product features (documentation and release metadata only).
+Use this as a capability checklist. Versions are incremental; **current ship = all rows through 0.9.0**. Version 0.8.2 added no product features (documentation and release metadata only).
 
 ### 6.1 v0.1 — MVP
 
@@ -208,13 +208,50 @@ Use this as a capability checklist. Versions are incremental; **current ship = a
 4. **Step bulk** — mark all done / clear all done / remove completed steps (confirm); one activity event per bulk action  
 5. **Import preview** — parse first; show counts, overlapping ids, sample titles; Cancel / Replace all / Merge by id  
 
-### 6.9 v0.8.1 — Reliability (current shipped capability)
+### 6.9 v0.8.1 — Reliability
 
 1. **Strict import validation** — untrusted import files are validated at the file/import boundary before any preview or apply. Rejects non-object roots, unsupported versions, malformed project/step/link shapes, blank or duplicate ids, out-of-allow-list `status` / `type` / `theme`, invalid dates, out-of-range `progress_pct` and `idleDays`
 2. **Bounded inputs** — documented caps: 5 MB per file, 5000 projects, 500 steps and 500 links per project, 50 tags/stack entries, per-field length limits
 3. **User-safe errors** — rejection messages name the offending field and are free of stack traces or source internals
 4. **Additive migration preserved** — valid v1 exports still parse; missing `starred` / `started_at` still default safely
 5. **Regression tests** — dependency-free `node:test` suite covering the import boundary and a guard against known router advisory ranges
+
+### 6.10 v0.9 — Accessibility & mobile field use (current shipped capability)
+
+1. **Shared modal focus lifecycle** — one primitive (`useDialogFocus`) drives both
+   the mobile menu sheet and the `?` shortcuts dialog: focus moves into the
+   surface on open (preferred target, else first focusable child, else the
+   container via `tabindex="-1"`), `Tab` / `Shift+Tab` wrap at the surface edges,
+   `Escape` closes, and focus returns to the element that opened it. No component
+   keeps a second focus-trap implementation
+2. **Board key ownership** — the keys the Board owns (`←→` / `h` `l` status,
+   `↑↓` / `k` `j` focus, `Enter` / `Space` open detail) are claimed before the
+   action is resolved, so an owned key at a column or card boundary neither
+   scrolls the page nor activates the card. Keys are still ignored while typing;
+   `aria-live` status announcements and post-move refocus are preserved
+3. **Mobile Board scroll affordance** — at `max-width: 767px`, and only when the
+   scroll container really overflows, the Board renders static hint text that
+   swiping sideways reveals more statuses and that status can be changed by
+   keyboard or from a project's detail page. Constraints: static text only, never
+   focusable, no button role, never an `aria-live` region, `pointer-events: none`,
+   never rendered on desktop. It retires after ~24px of horizontal scroll; the
+   dismissal is in-memory for the session and never persisted
+4. **Compact narrow empty Board** — reserved board height is reduced under the
+   narrow breakpoint, and reduced further when the board is empty, so the
+   empty-state `Create one` action stays above the fold on a phone. Desktop
+   sizing and the Board's intentional internal horizontal scroll are untouched
+5. **Status-change discoverability copy** — Board subtitle presents keyboard
+   control and the project detail page as primary paths for changing status, with
+   card dragging described as an optional desktop shortcut
+6. **Pure decision helpers + coverage** — `src/lib/boardKeyboard.ts`,
+   `src/lib/dialogFocus.ts`, and `src/lib/boardScrollHint.ts` hold the decisions
+   as DOM- and React-free functions; `npm test` runs 99 `node:test` cases
+
+**Explicitly not changed by v0.9:** no dependency added, removed, or upgraded; no
+storage key or schema change (`project-board-v1`, `project-board-activity-v1`); no
+migration, backend, telemetry, cloud sync, or GitHub Pages strategy change;
+desktop Board layout, drag-to-change-status, and the Board's intentional internal
+horizontal scroll behavior are preserved.
 
 ---
 
@@ -284,7 +321,7 @@ src/
 
 ## 10. Acceptance / verify checklist (current product)
 
-An implementation is “feature-complete for 0.7” if:
+An implementation is “feature-complete for 0.9” if:
 
 - [ ] `npm run build` succeeds  
 - [ ] Create/edit/delete project works and survives reload  
@@ -297,11 +334,15 @@ An implementation is “feature-complete for 0.7” if:
 - [ ] Focus chip + URL work  
 - [ ] Duplicate creates idea copy with unchecked steps  
 - [ ] Link chips safe for http(s) / path-like  
-- [ ] Footer/chrome shows **v0.8.2**
+- [ ] Footer/chrome shows **v0.9.0**
 - [ ] Import rejects malformed, unsafe, or oversized files with a plain-language message
 - [ ] `/review` weekly review works  
-- [ ] Board keyboard status/focus works  
+- [ ] Board keyboard status/focus works, and an owned key at a boundary neither scrolls the page nor opens the card
 - [ ] Import preview before apply  
+- [ ] Mobile menu and `?` shortcuts dialog: focus enters on open, `Tab` / `Shift+Tab` stay inside, `Escape` closes, focus returns to the opener
+- [ ] Narrow (`≤767px`) Board shows the swipe hint only while the columns overflow, as static non-focusable text, and drops it after a short horizontal scroll
+- [ ] Narrow empty Board keeps `Create one` above the fold; desktop Board layout and internal horizontal scroll unchanged
+- [ ] `npm test`, `npm run lint`, `npm run build`, and `npm run build:pages` pass with no dependency change
 - [ ] No personal name required in product UI chrome  
 - [ ] Storage key remains `project-board-v1` (settings fields migrate additively)  
 
@@ -322,7 +363,7 @@ Possible later themes (only if product owner approves a plan):
 
 1. Treat **§2 principles** as hard constraints.  
 2. Treat **§6** as the feature backlog already shipped (do not re-propose v0.1–v0.5 as “new” unless fixing bugs).  
-3. For new work: propose **v0.8+ plan** against gaps only; keep local-first.  
+3. For new work: propose a **post-v0.9 plan** against gaps only; keep local-first.
 4. Prefer small, versioned increments with verify via `npm run build` + manual smoke of routes above.  
 5. Keep UI English and product name **Project Board**.  
 
@@ -340,4 +381,4 @@ Possible later themes (only if product owner approves a plan):
 
 ---
 
-*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.8.2 (shipped capability through v0.8.1).*
+*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.9.0 (shipped capability through v0.9.0).*

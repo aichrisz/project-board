@@ -2,6 +2,68 @@
 
 All notable changes to Project Board. Local-first single-user app; dates are UTC.
 
+## 0.9.0 — Accessibility & mobile field use (2026-07-31)
+
+### Fixed
+
+- **Modal focus lifecycle.** The mobile menu sheet and the keyboard shortcuts
+  dialog now share one focus lifecycle (`useDialogFocus`): opening moves focus
+  into the surface, `Tab` / `Shift+Tab` wrap inside it instead of escaping to the
+  page behind, `Escape` closes, and closing returns focus to whatever opened the
+  surface. Previously the menu only focused its close button and trapped nothing,
+  and the shortcuts dialog did not manage focus at all, so keyboard and screen
+  reader users could tab into content hidden behind an open modal and lost their
+  place on close.
+- **Duplicate Escape handling.** The menu's component-local Escape listener and
+  the shortcut dialog's Escape branch were removed in favor of the shared hook,
+  so a single keypress no longer closes through two independent handlers and race
+  the focus restore. `?` still closes the help dialog.
+- **Board keyboard boundaries.** Keys the Board owns (`←→` / `h` `l`,
+  `↑↓` / `k` `j`, `Enter`, `Space`) are now claimed before the action is
+  resolved, so pressing one at the first or last column/card no longer falls
+  through to page scrolling or default card activation. Typing targets are still
+  ignored.
+
+### Added
+
+- **Mobile Board scroll affordance.** On narrow viewports (`max-width: 767px`),
+  when the status columns actually overflow their container, the Board renders a
+  static hint that sideways swiping reveals more statuses and that status can be
+  changed with the Board keyboard controls or from a project's detail page. It is
+  plain text: no button role, no tab stop, no `aria-live`, and no pointer-event
+  overlay. It retires itself after ~24px of horizontal scroll and never appears
+  on desktop. The dismissal is in-memory for the session and is never persisted.
+- **Compact narrow empty Board.** Under the narrow breakpoint the reserved board
+  height shrinks, and shrinks further when the board is empty, so the empty-state
+  `Create one` action stays above the fold on a phone. Desktop board sizing and
+  the intentional internal horizontal scroll are unchanged.
+- **Pure decision helpers with regression coverage.** `src/lib/boardKeyboard.ts`,
+  `src/lib/dialogFocus.ts`, and `src/lib/boardScrollHint.ts` hold the keyboard,
+  focus, and hint-gating decisions as DOM-free functions. `npm test` now runs 99
+  `node:test` cases (up from 45), including the new keyboard action, focus wrap,
+  and hint boundary suites.
+
+### Changed
+
+- **Board subtitle copy.** The subtitle now presents keyboard control and the
+  project detail page as the primary ways to change status, with card dragging
+  described as an optional desktop shortcut, instead of naming drag first on a
+  touch device where it is hardest to use.
+- Version chrome shows **v0.9.0**; `package.json`, `package-lock.json` root
+  metadata, and `src/version.ts` are synchronized (the lockfile root had drifted
+  at `0.8.1`).
+
+### Unchanged
+
+- **No dependency changes.** No runtime or development dependency was added,
+  removed, or upgraded; the lockfile diff is root version metadata only.
+- **No data model or backend change.** Storage keys `project-board-v1` and
+  `project-board-activity-v1` keep their existing schemas. No migration, no
+  cloud, auth, telemetry, or backend functionality, and no GitHub Pages strategy
+  change.
+- Desktop Board layout, drag-to-change-status, and the Board's intentional
+  internal horizontal scroll behavior.
+
 ## 0.8.2 — Deployment (2026-07-30)
 
 ### Changed
