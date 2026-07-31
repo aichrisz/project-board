@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { BoardColumn } from '../components/BoardColumn';
+import {
+  isBoardKeyboardKey,
+  resolveBoardKeyboardAction,
+} from '../lib/boardKeyboard';
 import { sortProjects } from '../lib/sort';
 import { useProjects } from '../store/ProjectContext';
 import type { ProjectStatus } from '../types';
@@ -86,31 +90,27 @@ export function Board() {
     const project = projects.find((p) => p.id === projectId);
     if (!project) return;
 
-    const key = e.key;
-    const colList = byStatus.get(project.status) ?? [];
-    const colIndex = colList.findIndex((p) => p.id === projectId);
-    const statusIndex = columns.indexOf(project.status);
+    // Claim every key the Board owns before deciding, so an owned key at a
+    // boundary still cannot scroll the page or activate the card.
+    if (!isBoardKeyboardKey(e.key)) return;
 
-    // Horizontal: change status among visible columns
-    if (
-      key === 'ArrowLeft' ||
-      key === 'ArrowRight' ||
-      key === 'h' ||
-      key === 'H' ||
-      key === 'l' ||
-      key === 'L'
-    ) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (statusIndex < 0) return;
-      const delta =
-        key === 'ArrowLeft' || key === 'h' || key === 'H' ? -1 : 1;
-      const nextStatusIndex = statusIndex + delta;
-      if (nextStatusIndex < 0 || nextStatusIndex >= columns.length) return;
-      const nextStatus = columns[nextStatusIndex]!;
-      if (nextStatus === project.status) return;
-      updateProject(projectId, { status: nextStatus });
-      setLiveMessage(`Moved to ${STATUS_LABELS[nextStatus]}`);
+    e.preventDefault();
+    e.stopPropagation();
+
+    const colList = byStatus.get(project.status) ?? [];
+    const action = resolveBoardKeyboardAction({
+      key: e.key,
+      projectId,
+      status: project.status,
+      statuses: columns,
+      columnProjectIds: colList.map((p) => p.id),
+    });
+
+    if (action.kind === 'none') return;
+
+    if (action.kind === 'move-status') {
+      updateProject(projectId, { status: action.status });
+      setLiveMessage(action.message);
       setFocusedId(projectId);
       // Refocus after re-render into new column
       requestAnimationFrame(() => {
@@ -121,33 +121,12 @@ export function Board() {
       return;
     }
 
-    // Vertical: move focus within column
-    if (
-      key === 'ArrowUp' ||
-      key === 'ArrowDown' ||
-      key === 'k' ||
-      key === 'K' ||
-      key === 'j' ||
-      key === 'J'
-    ) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (colIndex < 0) return;
-      const delta =
-        key === 'ArrowUp' || key === 'k' || key === 'K' ? -1 : 1;
-      const nextIndex = colIndex + delta;
-      if (nextIndex < 0 || nextIndex >= colList.length) return;
-      const next = colList[nextIndex]!;
-      focusCard(next.id);
+    if (action.kind === 'move-focus') {
+      focusCard(action.projectId);
       return;
     }
 
-    // Open detail
-    if (key === 'Enter' || key === ' ') {
-      e.preventDefault();
-      e.stopPropagation();
-      navigate(`/project/${projectId}`);
-    }
+    navigate(`/project/${projectId}`);
   }
 
   if (!ready) {
