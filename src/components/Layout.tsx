@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 import { openWeeklySnapshot } from '../lib/snapshot';
 import { useProjects } from '../store/ProjectContext';
 import { APP_VERSION } from '../version';
@@ -29,22 +30,21 @@ export function Layout() {
   const menuId = useId();
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const menuSheetRef = useRef<HTMLDivElement>(null);
 
   // Close mobile menu on route change
   useEffect(() => {
     setMenuOpen(false);
   }, [location.pathname]);
 
-  // Escape + focus when sheet opens
-  useEffect(() => {
-    if (!menuOpen) return;
-    closeBtnRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenuOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [menuOpen]);
+  // Escape, initial focus, Tab containment, and focus restoration.
+  useDialogFocus({
+    open: menuOpen,
+    containerRef: menuSheetRef,
+    initialFocusRef: closeBtnRef,
+    triggerRef: menuBtnRef,
+    onRequestClose: () => setMenuOpen(false),
+  });
 
   return (
     <div className="app-shell">
@@ -118,11 +118,13 @@ export function Layout() {
         />
       )}
       <div
+        ref={menuSheetRef}
         id={menuId}
         className={`menu-sheet${menuOpen ? ' open' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label="Menu"
+        tabIndex={-1}
         hidden={!menuOpen}
       >
         <div className="menu-sheet-header">

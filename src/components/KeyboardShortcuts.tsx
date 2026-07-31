@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
+
+import { useDialogFocus } from '../hooks/useDialogFocus';
 
 function isTypingTarget(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
@@ -22,6 +24,17 @@ const SHORTCUTS = [
 export function KeyboardShortcuts() {
   const navigate = useNavigate();
   const [helpOpen, setHelpOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Escape, initial focus, Tab containment, and focus restoration. `triggerRef`
+  // is omitted so the hook captures whatever was focused when `?` was pressed.
+  useDialogFocus({
+    open: helpOpen,
+    containerRef: panelRef,
+    initialFocusRef: closeButtonRef,
+    onRequestClose: () => setHelpOpen(false),
+  });
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -30,8 +43,10 @@ export function KeyboardShortcuts() {
 
       const key = e.key;
 
+      // Escape is owned by useDialogFocus while help is open; handling it here
+      // too would close twice and race the focus restoration.
       if (helpOpen) {
-        if (key === 'Escape' || key === '?') {
+        if (key === '?') {
           e.preventDefault();
           setHelpOpen(false);
         }
@@ -104,10 +119,16 @@ export function KeyboardShortcuts() {
       aria-labelledby="shortcut-help-title"
       onClick={() => setHelpOpen(false)}
     >
-      <div className="shortcut-panel" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={panelRef}
+        className="shortcut-panel"
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="shortcut-panel-header">
           <h2 id="shortcut-help-title">Keyboard shortcuts</h2>
           <button
+            ref={closeButtonRef}
             type="button"
             className="btn btn-ghost"
             onClick={() => setHelpOpen(false)}
