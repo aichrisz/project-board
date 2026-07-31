@@ -5,6 +5,11 @@ import {
   isBoardKeyboardKey,
   resolveBoardKeyboardAction,
 } from '../lib/boardKeyboard';
+import {
+  BOARD_HINT_DISMISS_SCROLL,
+  BOARD_NARROW_QUERY,
+  shouldShowBoardScrollHint,
+} from '../lib/boardScrollHint';
 import { sortProjects } from '../lib/sort';
 import { useProjects } from '../store/ProjectContext';
 import type { ProjectStatus } from '../types';
@@ -27,6 +32,10 @@ export function Board() {
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [liveMessage, setLiveMessage] = useState('');
   const cardEls = useRef(new Map<string, HTMLElement>());
+  const scrollEl = useRef<HTMLDivElement | null>(null);
+  const [narrow, setNarrow] = useState(false);
+  const [metrics, setMetrics] = useState({ scrollWidth: 0, clientWidth: 0 });
+  const [hintDismissed, setHintDismissed] = useState(false);
 
   const columns = useMemo(() => {
     return settings.showCompleted ? PROJECT_STATUSES : ACTIVE_STATUSES;
@@ -61,6 +70,64 @@ export function Board() {
       cardEls.current.get(projectId)?.focus();
     });
   }, []);
+
+  // Narrow viewport: the hint is scoped to the breakpoint where the board's
+  // columns cannot all fit, so desktop never measures or renders it.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia(BOARD_NARROW_QUERY);
+    setNarrow(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setNarrow(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  // Measure real overflow while narrow. ResizeObserver catches column count and
+  // card height changes; the resize listener covers viewport-only changes on
+  // browsers without an observer.
+  useEffect(() => {
+    if (!narrow) return;
+    const el = scrollEl.current;
+    if (!el) return;
+
+    const measure = () => {
+      setMetrics((prev) =>
+        prev.scrollWidth === el.scrollWidth && prev.clientWidth === el.clientWidth
+          ? prev
+          : { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth },
+      );
+    };
+    measure();
+
+    const observer =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(el);
+    const inner = el.firstElementChild;
+    if (inner) observer?.observe(inner);
+    window.addEventListener('resize', measure);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+    // `ready` is a dependency because the scroll container does not exist during
+    // the loading render, so the ref is null on the first pass.
+  }, [narrow, ready, columns.length, projects.length]);
+
+  // Once the reader has scrolled far enough to have found the gesture, the hint
+  // has done its job and retires for the rest of the session.
+  useEffect(() => {
+    if (!narrow || hintDismissed) return;
+    const el = scrollEl.current;
+    if (!el) return;
+
+    const onScroll = () => {
+      if (el.scrollLeft >= BOARD_HINT_DISMISS_SCROLL) setHintDismissed(true);
+    };
+    onScroll();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [narrow, ready, hintDismissed]);
 
   // Drop focus id if project disappeared or is no longer in a visible column
   useEffect(() => {
@@ -129,6 +196,13 @@ export function Board() {
     navigate(`/project/${projectId}`);
   }
 
+  const showScrollHint = shouldShowBoardScrollHint({
+    narrow,
+    scrollWidth: metrics.scrollWidth,
+    clientWidth: metrics.clientWidth,
+    dismissed: hintDismissed,
+  });
+
   if (!ready) {
     return <p className="muted">Loading…</p>;
   }
@@ -139,8 +213,9 @@ export function Board() {
         <div>
           <h1 className="page-title">Board</h1>
           <p className="page-subtitle">
-            Kanban by status. Drag a card to change status. Keyboard: ←→ change
-            status, ↑↓ move focus, Enter open.
+            Kanban by status. Change status with the keyboard (←→ change status,
+            ↑↓ move focus, Enter open) or from a project's detail page. Dragging
+            a card is an optional desktop shortcut.
           </p>
         </div>
         <label className="toggle">
@@ -162,7 +237,21 @@ export function Board() {
         {liveMessage}
       </div>
 
-      <div className="board-scroll" role="region" aria-label="Status board">
+      {showScrollHint && (
+        <p className="board-scroll-hint" id="board-scroll-hint">
+          Swipe to view more statuses. Status can be changed with the Board
+          keyboard controls or by editing a project from its detail page;
+          dragging a card is optional and only needed on desktop.
+        </p>
+      )}
+
+      <div
+        className="board-scroll"
+        ref={scrollEl}
+        role="region"
+        aria-label="Status board"
+        aria-describedby={showScrollHint ? 'board-scroll-hint' : undefined}
+      >
         <div className="board-columns">
           {columns.map((status) => (
             <BoardColumn

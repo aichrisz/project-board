@@ -1563,6 +1563,49 @@ a.link-chip-main:hover {
   margin-top: 8px;
 }
 
+/*
+ * Narrow-only swipe hint. Static instructional copy (no dismiss control): it
+ * removes itself once the reader scrolls, and it names the keyboard and detail
+ * page routes so dragging never reads as the only way to change status.
+ */
+.board-scroll-hint {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+/*
+ * Narrow only: the desktop board reserves most of the viewport height, which
+ * pushed the empty-state "Create one" action below the fold on a phone. Shrink
+ * the reserved height, and drop it further when the board is empty so the first
+ * action stays on the first screen. Horizontal scrolling is untouched.
+ */
+@media (max-width: 767px) {
+  .board-columns {
+    min-height: min(52vh, 420px);
+  }
+
+  .board-column {
+    min-height: 200px;
+    max-height: 62vh;
+  }
+
+  .board-page:has(.board-empty-hint) .board-columns {
+    min-height: 0;
+  }
+
+  .board-page:has(.board-empty-hint) .board-column {
+    min-height: 116px;
+    max-height: none;
+  }
+}
+
 /* Filter extras */
 .filter-row-end {
   display: flex;
