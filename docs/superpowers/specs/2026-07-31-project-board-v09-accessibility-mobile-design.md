@@ -1,7 +1,7 @@
 # Project Board v0.9 Accessibility & Mobile Field-Use Design
 
 Date: 2026-07-31
-Status: Proposed — awaiting Abel's spec review before implementation planning
+Status: Approved by Abel — 2026-07-31; implementation planning in progress
 Scope: Targeted mobile hardening for v0.9. Not a redesign.
 
 ## Purpose
