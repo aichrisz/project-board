@@ -378,7 +378,7 @@ export function Dashboard() {
                 description="Create your first project or load realistic inventory from Settings."
                 action={
                   <div className="empty-action-row">
-                    <Link to="/new" className="btn btn-primary">
+                    <Link to="/new" className="btn btn-secondary">
                       + New project
                     </Link>
                     <Link to="/settings" className="btn btn-secondary">
@@ -403,8 +403,7 @@ export function Dashboard() {
                   <div className="empty-action-row">
                     <button
                       type="button"
-                      className="btn btn-primary"
-                      onClick={onClearFilters}
+                      className="btn btn-secondary"
                     >
                       Clear filters
                     </button>

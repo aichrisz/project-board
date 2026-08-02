@@ -306,7 +306,7 @@ export function Settings() {
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel danger-zone">
         <h2 className="panel-title">Seed data</h2>
         <p className="muted">
           Load realistic inventory — a template of projects that mirror the side
