@@ -4,19 +4,26 @@ A **local-first** personal project inventory dashboard. Track status, progress, 
 
 - **Product name:** Project Board  
 - **Stack:** Vite + React + TypeScript  
-- **Version:** 0.9.0
+- **Version:** 0.10.0
 - **Storage:** browser `localStorage` key `project-board-v1`  
 - **UI language:** English  
 
-## Accessibility & mobile (v0.9)
+## Design (v0.10 “Quiet Command Center”)
 
-- **Modal focus lifecycle** — the mobile menu sheet and the `?` shortcuts dialog share one primitive (`src/hooks/useDialogFocus.ts`): focus moves into the surface on open, `Tab` / `Shift+Tab` wrap inside it, `Escape` closes, and focus returns to whatever opened it
-- **Board keyboard** — the Board claims its own keys (←→ / `h` `l` status, ↑↓ / `k` `j` focus, Enter/Space open) before resolving the action, so a key pressed at the first or last column/card no longer scrolls the page or activates the card; keys are still ignored while typing
-- **Mobile Board affordance** — under `max-width: 767px`, and only when the columns really overflow, the Board shows static hint text that swiping sideways reveals more statuses and that status can also be changed by keyboard or from a project's detail page. It is not focusable, not a button, not an `aria-live` region, and does not intercept touches; it retires after a short horizontal scroll and is never stored
-- **Narrow empty state** — reserved board height is compact on phones so the empty-state `Create one` action stays above the fold. Desktop layout and the Board's intentional internal horizontal scroll are unchanged
-- **Pure decision helpers** — `src/lib/boardKeyboard.ts`, `src/lib/dialogFocus.ts`, and `src/lib/boardScrollHint.ts` keep the keyboard, focus, and hint-gating rules DOM-free and unit-tested; `npm test` covers 99 cases
-- **No new dependencies** — no runtime or dev dependency added, removed, or upgraded; no storage schema, backend, telemetry, or Pages change
-- **Version chrome** — footer shows **v0.9.0**
+- **Surface ladder** — near-black blue-slate surfaces (`sunken`, `base`, `raised`, and `overlay`) use hairline borders for depth; no blur, gradients, glow, or glass effects
+- **Single accent** — restrained focus blue is reserved for interactive affordance, focus, active rules, and the primary action; each view keeps at most one accent-filled element
+- **Semantic signals** — status, health, and deadline hues are used as small graphical reinforcement and always appear beside visible text labels, so meaning survives greyscale, color blindness, and forced-colors mode
+- **Editorial hierarchy** — page title → uppercase tracked section label → item title → metadata, with system fonts and tabular numerals for counts, progress, dates, and timestamps
+- **Grouping by purpose** — Dashboard uses a ledger strip and status-spined project cards, Board uses sunken troughs, Review uses report lists, and Activity uses a timeline; these are not uniform SaaS cards
+- **Measured contrast floors** — final tokens target at least 4.5:1 for body text and 3:1 for UI borders. The tightest checked pairings are dark danger-on-hover at 4.72:1, light warning-on-sunken at 4.53:1, and light muted-on-sunken at 4.56:1
+- **Responsive and accessible** — touch targets remain at least 44px, focus rings, reduced motion, forced colors, print styles, both themes, and the existing mobile Board overflow affordance are preserved
+- **No new dependencies** — the redesign is presentation-only; storage keys and schemas, routes, import/export, shortcuts, Board keyboard behavior, dialogs, PWA behavior, and deployment flow remain unchanged
+- **Version chrome** — footer shows **v0.10.0**
+
+The v0.9 accessibility contracts remain in force: the mobile menu and `?` dialog
+retain their shared focus lifecycle, Board-owned keys are claimed before action
+resolution, and the narrow Board hint is static, real-overflow-gated,
+non-focusable, session-only, and never persisted.
 
 ## Deployment (v0.8.2)
 
