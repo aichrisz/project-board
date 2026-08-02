@@ -53,12 +53,16 @@ export function StatsPanel({ stats }: Props) {
 
   return (
     <section className="stats-panel" aria-label="Statistics">
-      <div className="stats-block">
-        <h2 className="stats-title">By type</h2>
+      <div className="section-head">
+        <h2 className="section-label">By type</h2>
+      </div>
+      <div className="stats-block-list">
         <Bars items={byType} total={stats.total} />
       </div>
-      <div className="stats-block">
-        <h2 className="stats-title">By status</h2>
+      <div className="section-head">
+        <h2 className="section-label">By status</h2>
+      </div>
+      <div className="stats-block-list">
         <Bars items={byStatus} total={stats.total} />
       </div>
     </section>

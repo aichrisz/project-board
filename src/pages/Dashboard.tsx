@@ -369,6 +369,8 @@ export function Dashboard() {
             />
           )}
 
+      <div className="dash-layout">
+        <div className="dash-main">
           <section className="card-grid" aria-label="Projects">
             {isEmptyBoard ? (
               <EmptyState
@@ -426,10 +428,15 @@ export function Dashboard() {
               ))
             )}
           </section>
+        </div>
 
-          {!isEmptyBoard && <RecentActivity limit={5} />}
-
-          {!isEmptyBoard && <StatsPanel stats={stats} />}
+        {!isEmptyBoard && (
+          <aside className="dash-rail">
+            <RecentActivity limit={5} />
+            <StatsPanel stats={stats} />
+          </aside>
+        )}
+      </div>
         </>
       )}
 

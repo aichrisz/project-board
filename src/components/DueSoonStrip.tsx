@@ -19,8 +19,8 @@ export function DueSoonStrip({ projects }: Props) {
 
   return (
     <section className="due-soon-strip" aria-label="Due soon">
-      <div className="due-soon-header">
-        <h2 className="due-soon-title">Due soon</h2>
+      <div className="section-head">
+        <h2 className="section-label">Due soon</h2>
         <span className="due-soon-count">{projects.length}</span>
       </div>
       <ul className="due-soon-list">
@@ -33,6 +33,10 @@ export function DueSoonStrip({ projects }: Props) {
                 to={`/project/${p.id}`}
                 className={`due-soon-item due-${urgency}`}
               >
+                <span
+                  className={`status-dot status-${p.status}`}
+                  aria-hidden
+                />
                 <span className="due-soon-item-title">{p.title}</span>
                 <time
                   className="due-soon-item-meta"

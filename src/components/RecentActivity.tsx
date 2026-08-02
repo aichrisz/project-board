@@ -32,8 +32,8 @@ export function RecentActivity({ limit = 5 }: Props) {
 
   return (
     <section className="recent-activity" aria-label="Recent activity">
-      <div className="recent-activity-header">
-        <h2 className="recent-activity-title">Recent</h2>
+      <div className="section-head">
+        <h2 className="section-label">Recent</h2>
         <Link to="/activity" className="recent-activity-link">
           View all
         </Link>

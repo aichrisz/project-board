@@ -2,7 +2,6 @@ import { useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'r
 import { Link } from 'react-router';
 import type { Project } from '../types';
 import { STATUS_LABELS, TYPE_LABELS } from '../types';
-import { HealthBadges } from './HealthBadges';
 import { LinkChips } from './LinkChips';
 
 type Props = {
@@ -16,7 +15,6 @@ type Props = {
 
 export function ProjectCard({
   project,
-  idleDays,
   onToggleStar,
   onAddStep,
   onArchive,
@@ -45,12 +43,12 @@ export function ProjectCard({
   return (
     <article
       className={`project-card${project.starred ? ' project-card-starred' : ''}`}
+      data-status={project.status}
     >
-      <div className="card-top">
-        <span className={`status-chip status-${project.status}`}>
-          {STATUS_LABELS[project.status]}
-        </span>
-        <span className="type-chip">{TYPE_LABELS[project.type]}</span>
+      <div className="card-head">
+        <Link to={`/project/${project.id}`} className="card-main-link">
+          <h3 className="card-title">{project.title}</h3>
+        </Link>
         <div className="card-actions">
           <button
             type="button"
@@ -67,16 +65,22 @@ export function ProjectCard({
         </div>
       </div>
 
-      <Link to={`/project/${project.id}`} className="card-main-link">
-        <h3 className="card-title">{project.title}</h3>
-        {project.summary ? (
-          <p className="card-summary">{project.summary}</p>
-        ) : null}
+      <div className="card-meta">
+        <span>{STATUS_LABELS[project.status]}</span>
+        <span>{TYPE_LABELS[project.type]}</span>
+        {project.tags.map((tag) => (
+          <span key={tag} className="card-tag">{tag}</span>
+        ))}
+      </div>
+
+      <Link to={`/project/${project.id}`} className="card-progress-link">
 
         <div className="progress-block">
           <div className="progress-meta">
-            <span>Progress</span>
-            <span>{project.progress_pct}%</span>
+            <span>
+              {project.steps.filter((step) => step.done).length}/{project.steps.length}{' '}
+              steps · {project.progress_pct}%
+            </span>
           </div>
           <div className="progress-track" aria-hidden>
             <div
@@ -84,15 +88,6 @@ export function ProjectCard({
               style={{ width: `${project.progress_pct}%` }}
             />
           </div>
-        </div>
-
-        <div className="card-footer">
-          <HealthBadges project={project} idleDays={idleDays} showSteps />
-          {project.deadline && (
-            <time className="card-deadline" dateTime={project.deadline}>
-              {project.deadline}
-            </time>
-          )}
         </div>
       </Link>
 
