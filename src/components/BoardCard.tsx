@@ -1,7 +1,6 @@
 import { Link } from 'react-router';
 import type { Project } from '../types';
 import { TYPE_LABELS } from '../types';
-import { HealthBadges } from './HealthBadges';
 
 type Props = {
   project: Project;
@@ -18,7 +17,6 @@ type Props = {
 
 export function BoardCard({
   project,
-  idleDays,
   draggable = true,
   tabIndex = 0,
   focused = false,
@@ -60,22 +58,21 @@ export function BoardCard({
           <span className="board-card-progress">{project.progress_pct}%</span>
         </div>
         <h3 className="board-card-title">{project.title}</h3>
-        {project.summary ? (
-          <p className="board-card-summary">{project.summary}</p>
-        ) : null}
-        <div className="board-card-footer">
-          <HealthBadges project={project} idleDays={idleDays} />
+        <div className="board-card-meta">
           {project.deadline ? (
             <time className="card-deadline" dateTime={project.deadline}>
-              {project.deadline}
+              Due {project.deadline}
             </time>
-          ) : null}
+          ) : (
+            <span>No deadline</span>
+          )}
+        </div>
+        <div className="board-card-progress-line" aria-hidden>
+          <span style={{ width: `${project.progress_pct}%` }} />
         </div>
       </Link>
       {draggable ? (
-        <span className="board-card-handle" aria-hidden title="Drag to change status">
-          ⋮⋮
-        </span>
+        <span className="board-card-handle" aria-hidden title="Drag to change status" />
       ) : null}
     </article>
   );

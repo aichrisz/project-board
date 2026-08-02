@@ -49,8 +49,7 @@ export function BoardColumn({
         onDrop(status, id);
       }}
     >
-      <header className="board-column-header">
-        <span className={`status-dot status-${status}`} aria-hidden />
+      <header className="board-column-header" data-status={status}>
         <h2 className="board-column-title">{STATUS_LABELS[status]}</h2>
         <span className="board-column-count">{projects.length}</span>
       </header>
