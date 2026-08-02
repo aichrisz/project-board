@@ -72,7 +72,8 @@ export function BoardCard({
         </div>
       </Link>
       {draggable ? (
-        <span className="board-card-handle" aria-hidden title="Drag to change status" />
+        // A text glyph avoids a decorative gradient while keeping the drag affordance visual-only.
+        <span className="board-card-handle" aria-hidden title="Drag to change status">⠿</span>
       ) : null}
     </article>
   );

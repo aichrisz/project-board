@@ -3370,13 +3370,10 @@ a.link-chip-main:hover {
 .board-card-handle {
   top: 10px;
   right: 8px;
-  width: 8px;
-  height: 12px;
   color: var(--pb-text-muted);
   opacity: 1;
-  background-image: radial-gradient(currentColor 1px, transparent 1px);
-  background-size: 4px 4px;
-  font-size: 0;
+  font-size: 0.875rem;
+  line-height: 1;
   letter-spacing: 0;
 }
 
