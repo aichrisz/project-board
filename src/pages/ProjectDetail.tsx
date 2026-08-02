@@ -180,11 +180,21 @@ export function ProjectDetail() {
       </div>
 
       <header className="detail-header">
-        <div className="card-top">
-          <span className={`status-chip status-${project.status}`}>
-            {STATUS_LABELS[project.status]}
+        <h1 className="page-title">{project.title}</h1>
+        <div className="detail-meta">
+          <span>{STATUS_LABELS[project.status]}</span>
+          <span aria-hidden>·</span>
+          <span>{TYPE_LABELS[project.type]}</span>
+          <span aria-hidden>·</span>
+          <span>Created {new Date(project.created_at).toLocaleDateString()}</span>
+          <span aria-hidden>·</span>
+          <span className={days !== null && days <= 3 ? `deadline-hint ${days < 0 ? 'danger' : 'warn'}` : ''}>
+            {project.deadline ? `Due ${project.deadline}` : 'No deadline'}
           </span>
-          <span className="type-chip">{TYPE_LABELS[project.type]}</span>
+          <span aria-hidden>·</span>
+          <span>{project.progress_pct}%</span>
+        </div>
+        <div className="detail-health">
           {project.starred && (
             <span className="badge badge-starred" aria-label="Starred">
               ★ Starred
@@ -197,12 +207,11 @@ export function ProjectDetail() {
           )}
           {health === 'idle' && <span className="badge badge-idle">Idle</span>}
         </div>
-        <h1 className="page-title">{project.title}</h1>
         {project.summary ? <p className="page-subtitle">{project.summary}</p> : null}
       </header>
 
-      <div className="detail-grid">
-        <section className="panel">
+      <div className="detail-layout">
+        <section className="panel detail-rail-panel">
           <h2 className="panel-title">Progress</h2>
           <div className="progress-block large">
             <div className="progress-meta">
@@ -238,7 +247,7 @@ export function ProjectDetail() {
           )}
         </section>
 
-        <section className="panel">
+        <section className="panel detail-rail-panel">
           <h2 className="panel-title">Meta</h2>
           <div className="field-row">
             <label className="field">
@@ -322,7 +331,7 @@ export function ProjectDetail() {
           )}
         </section>
 
-        <section className="panel panel-wide">
+        <section className="panel panel-wide detail-main-panel">
           <h2 className="panel-title">Steps</h2>
           <StepList
             steps={project.steps}
@@ -336,7 +345,7 @@ export function ProjectDetail() {
           />
         </section>
 
-        <section className="panel panel-wide">
+        <section className="panel panel-wide detail-main-panel">
           <div className="panel-title-row">
             <h2 className="panel-title">Notes</h2>
             <div className="segmented" role="group" aria-label="Notes mode">
@@ -376,7 +385,7 @@ export function ProjectDetail() {
           )}
         </section>
 
-        <section className="panel panel-wide">
+        <section className="panel panel-wide detail-rail-panel">
           <h2 className="panel-title">Links</h2>
           {project.links.length === 0 ? (
             <p className="muted">No links yet.</p>

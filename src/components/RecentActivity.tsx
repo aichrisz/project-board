@@ -38,9 +38,10 @@ export function RecentActivity({ limit = 5 }: Props) {
           View all
         </Link>
       </div>
-      <ul className="recent-activity-list">
+      <ul className="activity-feed recent-activity-list">
         {items.map((e) => (
-          <li key={e.id} className="recent-activity-item">
+          <li key={e.id} className={`activity-feed-item activity-type-${e.type}`}>
+            <span className={`activity-type activity-type-${e.type}`} aria-hidden />
             <span className="recent-activity-msg">
               {e.projectId ? (
                 <Link to={`/project/${e.projectId}`}>{e.message}</Link>
@@ -49,7 +50,7 @@ export function RecentActivity({ limit = 5 }: Props) {
               )}
             </span>
             <time
-              className="recent-activity-time"
+              className="activity-feed-time recent-activity-time"
               dateTime={e.at}
               title={new Date(e.at).toLocaleString()}
             >

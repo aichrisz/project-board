@@ -13,18 +13,18 @@ import type { Project } from '../types';
 function ProjectListSection({
   title,
   projects,
-  emptyLabel = 'None — nice.',
+  emptyLabel = 'Nothing here yet.',
 }: {
   title: string;
   projects: Project[];
   emptyLabel?: string;
 }) {
   return (
-    <section className="panel">
-      <h2 className="panel-title">
-        {title}
-        <span className="review-section-count">{projects.length}</span>
-      </h2>
+    <section className="review-section">
+      <div className="section-head">
+        <h2 className="section-label">{title}</h2>
+        <span className="section-count">{projects.length}</span>
+      </div>
       {projects.length === 0 ? (
         <p className="muted review-empty">{emptyLabel}</p>
       ) : (
@@ -105,30 +105,30 @@ export function Review() {
         </p>
       )}
 
-      <div className="kpi-row review-kpi-row" role="group" aria-label="Review KPIs">
-        <div className="kpi-card">
+      <div className="kpi-ledger review-kpi-row" role="group" aria-label="Review KPIs">
+        <div className="kpi-cell">
           <div className="kpi-label">Active</div>
-          <div className="kpi-value">{kpis.active}</div>
+          <div className="kpi-figure">{kpis.active}</div>
         </div>
-        <div className="kpi-card">
+        <div className="kpi-cell">
           <div className="kpi-label">In progress</div>
-          <div className="kpi-value">{kpis.inProgress}</div>
+          <div className="kpi-figure">{kpis.inProgress}</div>
         </div>
-        <div className={`kpi-card${kpis.overdue > 0 ? ' kpi-danger' : ''}`}>
+        <div className={`kpi-cell${kpis.overdue > 0 ? ' kpi-cell-danger' : ''}`}>
           <div className="kpi-label">Overdue</div>
-          <div className="kpi-value">{kpis.overdue}</div>
+          <div className="kpi-figure">{kpis.overdue}</div>
         </div>
-        <div className="kpi-card">
+        <div className="kpi-cell">
           <div className="kpi-label">Idle</div>
-          <div className="kpi-value">{kpis.idle}</div>
+          <div className="kpi-figure">{kpis.idle}</div>
         </div>
-        <div className="kpi-card">
+        <div className="kpi-cell">
           <div className="kpi-label">Starred</div>
-          <div className="kpi-value">{kpis.starred}</div>
+          <div className="kpi-figure">{kpis.starred}</div>
         </div>
-        <div className="kpi-card">
+        <div className="kpi-cell">
           <div className="kpi-label">Due ≤7d</div>
-          <div className="kpi-value">{kpis.dueSoon}</div>
+          <div className="kpi-figure">{kpis.dueSoon}</div>
         </div>
       </div>
 
@@ -158,21 +158,34 @@ export function Review() {
 
       <section className="panel">
         <h2 className="panel-title">Suggested actions</h2>
-        <ul className="review-suggestions">
+        <ol className="review-suggestions">
           {suggestions.map((s) => (
             <li key={s}>{s}</li>
           ))}
-        </ul>
+        </ol>
       </section>
 
       <div className="review-sections">
-        <ProjectListSection title="Overdue" projects={buckets.overdue} />
-        <ProjectListSection title="Due soon" projects={buckets.dueSoon} />
+        <ProjectListSection
+          title="Overdue"
+          projects={buckets.overdue}
+          emptyLabel="Nothing overdue."
+        />
+        <ProjectListSection
+          title="Due soon"
+          projects={buckets.dueSoon}
+          emptyLabel="Nothing due in the next 7 days."
+        />
         <ProjectListSection
           title="Stale in progress"
           projects={buckets.staleInProgress}
+          emptyLabel="Nothing stale in progress."
         />
-        <ProjectListSection title="No steps" projects={buckets.noSteps} />
+        <ProjectListSection
+          title="No steps"
+          projects={buckets.noSteps}
+          emptyLabel="Every project has steps."
+        />
       </div>
     </div>
   );

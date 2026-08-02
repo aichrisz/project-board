@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { Link } from 'react-router';
 import { EmptyState } from '../components/EmptyState';
 import { useProjects } from '../store/ProjectContext';
@@ -30,6 +31,8 @@ export function Activity() {
     return <p className="muted">Loading…</p>;
   }
 
+  let lastDate = '';
+
   return (
     <div className="activity-page">
       <div className="page-header">
@@ -52,29 +55,42 @@ export function Activity() {
         />
       ) : (
         <ol className="activity-feed" aria-label="Activity log">
-          {activity.map((e) => (
-            <li key={e.id} className="activity-feed-item">
-              <span className={`activity-type activity-type-${e.type}`}>
-                {TYPE_LABELS[e.type] ?? e.type}
-              </span>
-              <div className="activity-feed-body">
-                <p className="activity-feed-msg">
-                  {e.projectId ? (
-                    <Link to={`/project/${e.projectId}`}>{e.message}</Link>
-                  ) : (
-                    e.message
-                  )}
-                </p>
-                <time
-                  className="activity-feed-time"
-                  dateTime={e.at}
-                  title={new Date(e.at).toLocaleString()}
-                >
-                  {formatWhen(e.at)}
-                </time>
-              </div>
-            </li>
-          ))}
+          {activity.map((e) => {
+            const dateLabel = new Date(e.at).toDateString();
+            const showDate = dateLabel !== lastDate;
+            lastDate = dateLabel;
+            return (
+              <Fragment key={e.id}>
+                {showDate && (
+                  <li className="activity-date-group section-label">{dateLabel}</li>
+                )}
+                <li key={e.id} className={`activity-feed-item activity-type-${e.type}`}>
+                  <span className={`activity-type activity-type-${e.type}`}>
+                    {TYPE_LABELS[e.type] ?? e.type}
+                  </span>
+                  <div className="activity-feed-body">
+                    <p className="activity-feed-msg">
+                      {e.projectId ? (
+                        <Link to={`/project/${e.projectId}`}>{e.message}</Link>
+                      ) : (
+                        e.message
+                      )}
+                    </p>
+                    <time
+                      className="activity-feed-time"
+                      dateTime={e.at}
+                      title={new Date(e.at).toLocaleString()}
+                    >
+                      {formatWhen(e.at)}
+                    </time>
+                  </div>
+                </li>
+              </Fragment>
+            );
+          })}
+          <li className="activity-feed-cap muted">
+            Showing the latest {activity.length} of at most 100 events.
+          </li>
         </ol>
       )}
     </div>
