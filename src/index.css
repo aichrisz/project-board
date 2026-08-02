@@ -2087,7 +2087,6 @@ a.link-chip-main:hover {
     height: calc(56px + env(safe-area-inset-bottom, 0px));
     padding-bottom: env(safe-area-inset-bottom, 0px);
     background: var(--bg-topbar);
-    backdrop-filter: blur(10px);
     border-top: 1px solid var(--border);
   }
 
@@ -2817,5 +2816,116 @@ a.link-chip-main:hover {
 @media (max-width: 767px) {
   .bottom-tab-label {
     font-size: 0.68rem;
+  }
+}
+
+
+/* Quiet Command Center shell */
+.topbar {
+  height: 48px;
+  padding: 0 var(--pb-space-16);
+  background: var(--pb-surface-base);
+  border-bottom: 1px solid var(--pb-line-subtle);
+}
+
+.brand-text {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  text-transform: none;
+}
+
+.nav-link {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 0;
+  color: var(--pb-text-secondary);
+  background: transparent;
+}
+
+.nav-link:hover {
+  background: transparent;
+  color: var(--pb-text);
+}
+
+.nav-link.active {
+  background: transparent;
+  color: var(--pb-text);
+  box-shadow: inset 0 -2px 0 var(--pb-accent);
+}
+
+.main {
+  max-width: var(--max);
+  padding: 20px 12px 48px;
+}
+
+.app-footer {
+  display: block;
+  border-top: 1px solid var(--pb-line-subtle);
+  padding: 10px 16px 16px;
+  color: var(--pb-text-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0;
+}
+
+.app-footer-version {
+  opacity: 1;
+}
+
+@media (min-width: 768px) {
+  .main {
+    padding-inline: 16px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .main {
+    padding-inline: 24px;
+  }
+}
+
+@media (max-width: 767px) {
+  .topbar {
+    gap: 8px;
+    padding: 0 12px;
+  }
+
+  .brand-text {
+    font-size: 13px;
+  }
+
+  .main {
+    padding: 16px 12px 24px;
+  }
+
+  .bottom-nav {
+    height: calc(56px + env(safe-area-inset-bottom, 0px));
+    background: var(--pb-surface-raised);
+    border-top: 1px solid var(--pb-line-subtle);
+  }
+
+  .bottom-tab {
+    font-size: 11px;
+  }
+
+  .bottom-tab.active {
+    color: var(--pb-accent-hover);
+    background: transparent;
+    box-shadow: inset 0 2px 0 var(--pb-accent);
+  }
+
+  .menu-backdrop {
+    background: var(--pb-scrim);
+  }
+
+  .menu-sheet {
+    background: var(--pb-surface-overlay);
+    border-left: 1px solid var(--pb-line);
+    box-shadow: var(--pb-elev-dialog);
+    transition: transform var(--pb-dur) var(--pb-ease);
+  }
+
+  .app-footer {
+    padding-bottom: calc(12px + 56px + env(safe-area-inset-bottom, 0px));
   }
 }

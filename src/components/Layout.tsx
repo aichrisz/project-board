@@ -176,9 +176,12 @@ export function Layout() {
       </main>
 
       <footer className="app-footer">
-        <span className="app-footer-brand">Project Board</span>
-        <span className="app-footer-version" aria-label={`Version ${APP_VERSION}`}>
-          v{APP_VERSION}
+        <span>
+          Project Board{' '}
+          <span className="app-footer-version" aria-label={`Version ${APP_VERSION}`}>
+            v{APP_VERSION}
+          </span>{' '}
+          · local-first · data stays in this browser
         </span>
       </footer>
 
