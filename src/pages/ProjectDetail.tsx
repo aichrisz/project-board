@@ -211,7 +211,64 @@ export function ProjectDetail() {
       </header>
 
       <div className="detail-layout">
-        <section className="panel detail-rail-panel">
+        <div className="detail-main">
+          <section className="panel panel-wide detail-main-panel">
+          <h2 className="panel-title">Steps</h2>
+          <StepList
+            steps={project.steps}
+            onToggle={(stepId) => toggleStep(project.id, stepId)}
+            onAdd={(title) => addStep(project.id, title)}
+            onRemove={(stepId) => removeStep(project.id, stepId)}
+            onReorder={(orderedIds) => reorderSteps(project.id, orderedIds)}
+            onMarkAllDone={() => setAllStepsDone(project.id, true)}
+            onClearAllDone={() => setAllStepsDone(project.id, false)}
+            onRemoveCompleted={() => removeCompletedSteps(project.id)}
+          />
+        </section>
+
+          <section className="panel panel-wide detail-main-panel">
+          <div className="panel-title-row">
+            <h2 className="panel-title">Notes</h2>
+            <div className="segmented" role="group" aria-label="Notes mode">
+              <button
+                type="button"
+                className={`seg-btn ${notesMode === 'edit' ? 'active' : ''}`}
+                onClick={() => setNotesMode('edit')}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                className={`seg-btn ${notesMode === 'preview' ? 'active' : ''}`}
+                onClick={() => setNotesMode('preview')}
+              >
+                Preview
+              </button>
+            </div>
+          </div>
+          {notesMode === 'edit' ? (
+            <textarea
+              className="notes-area"
+              value={project.notes_md}
+              onChange={(e) => updateProject(project.id, { notes_md: e.target.value })}
+              rows={8}
+              placeholder="Markdown subset: **bold**, *italic*, `code`, lists, [links](https://…)"
+            />
+          ) : project.notes_md.trim() ? (
+            <div
+              className="md-preview"
+              dangerouslySetInnerHTML={{
+                __html: renderMarkdownSafe(project.notes_md),
+              }}
+            />
+          ) : (
+            <p className="muted">No notes yet. Switch to Edit to add some.</p>
+          )}
+        </section>
+        </div>
+
+        <aside className="detail-rail" aria-label="Project details">
+          <section className="panel detail-rail-panel">
           <h2 className="panel-title">Progress</h2>
           <div className="progress-block large">
             <div className="progress-meta">
@@ -247,7 +304,7 @@ export function ProjectDetail() {
           )}
         </section>
 
-        <section className="panel detail-rail-panel">
+          <section className="panel detail-rail-panel">
           <h2 className="panel-title">Meta</h2>
           <div className="field-row">
             <label className="field">
@@ -331,61 +388,7 @@ export function ProjectDetail() {
           )}
         </section>
 
-        <section className="panel panel-wide detail-main-panel">
-          <h2 className="panel-title">Steps</h2>
-          <StepList
-            steps={project.steps}
-            onToggle={(stepId) => toggleStep(project.id, stepId)}
-            onAdd={(title) => addStep(project.id, title)}
-            onRemove={(stepId) => removeStep(project.id, stepId)}
-            onReorder={(orderedIds) => reorderSteps(project.id, orderedIds)}
-            onMarkAllDone={() => setAllStepsDone(project.id, true)}
-            onClearAllDone={() => setAllStepsDone(project.id, false)}
-            onRemoveCompleted={() => removeCompletedSteps(project.id)}
-          />
-        </section>
-
-        <section className="panel panel-wide detail-main-panel">
-          <div className="panel-title-row">
-            <h2 className="panel-title">Notes</h2>
-            <div className="segmented" role="group" aria-label="Notes mode">
-              <button
-                type="button"
-                className={`seg-btn ${notesMode === 'edit' ? 'active' : ''}`}
-                onClick={() => setNotesMode('edit')}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                className={`seg-btn ${notesMode === 'preview' ? 'active' : ''}`}
-                onClick={() => setNotesMode('preview')}
-              >
-                Preview
-              </button>
-            </div>
-          </div>
-          {notesMode === 'edit' ? (
-            <textarea
-              className="notes-area"
-              value={project.notes_md}
-              onChange={(e) => updateProject(project.id, { notes_md: e.target.value })}
-              rows={8}
-              placeholder="Markdown subset: **bold**, *italic*, `code`, lists, [links](https://…)"
-            />
-          ) : project.notes_md.trim() ? (
-            <div
-              className="md-preview"
-              dangerouslySetInnerHTML={{
-                __html: renderMarkdownSafe(project.notes_md),
-              }}
-            />
-          ) : (
-            <p className="muted">No notes yet. Switch to Edit to add some.</p>
-          )}
-        </section>
-
-        <section className="panel panel-wide detail-rail-panel">
+          <section className="panel panel-wide detail-rail-panel">
           <h2 className="panel-title">Links</h2>
           {project.links.length === 0 ? (
             <p className="muted">No links yet.</p>
@@ -429,6 +432,7 @@ export function ProjectDetail() {
             </button>
           </form>
         </section>
+        </aside>
       </div>
 
       <p className="meta-timestamps muted">

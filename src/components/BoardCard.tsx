@@ -53,12 +53,9 @@ export function BoardCard({
           if (e.detail === 0) return;
         }}
       >
-        <div className="board-card-top">
-          <span className="type-chip">{TYPE_LABELS[project.type]}</span>
-          <span className="board-card-progress">{project.progress_pct}%</span>
-        </div>
         <h3 className="board-card-title">{project.title}</h3>
         <div className="board-card-meta">
+          <span>{TYPE_LABELS[project.type]} · </span>
           {project.deadline ? (
             <time className="card-deadline" dateTime={project.deadline}>
               Due {project.deadline}

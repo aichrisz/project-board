@@ -424,8 +424,9 @@ code {
   background: transparent;
   border: none;
   color: var(--pb-text-muted);
-  min-width: 32px;
-  min-height: 32px;
+  /* Icon-only actions meet the mobile touch-target floor before desktop compaction. */
+  min-width: 44px;
+  min-height: 44px;
   border-radius: var(--pb-radius-sm);
   font-size: 1.2rem;
   line-height: 1;
@@ -3341,6 +3342,15 @@ a.link-chip-main:hover {
   gap: var(--pb-space-6);
 }
 
+.board-card-top .type-chip {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--pb-text-muted);
+  font-size: var(--pb-font-meta);
+}
+
 .board-card-title {
   font-size: var(--pb-font-item);
   line-height: var(--pb-font-item-line);
@@ -3435,7 +3445,16 @@ a.link-chip-main:hover {
   gap: var(--pb-space-24);
 }
 
-.detail-layout > .panel {
+.detail-main,
+.detail-rail {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pb-space-24);
+}
+
+.detail-main > .panel,
+.detail-rail > .panel {
   min-width: 0;
   padding: 0;
   background: transparent;
@@ -3474,13 +3493,6 @@ a.link-chip-main:hover {
     align-items: start;
   }
 
-  .detail-layout > .detail-main-panel {
-    grid-column: 1;
-  }
-
-  .detail-layout > .detail-rail-panel {
-    grid-column: 2;
-  }
 }
 
 .steps {
