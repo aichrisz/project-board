@@ -417,7 +417,7 @@ code {
 }
 
 .btn-danger:hover {
-  background: rgba(240, 113, 120, 0.25);
+  background: var(--pb-signal-danger-quiet);
 }
 
 .btn-icon {
@@ -459,39 +459,6 @@ code {
 }
 
 /* KPI */
-.kpi-row {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-@media (min-width: 720px) {
-  .kpi-row {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-.kpi-label {
-  display: block;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--pb-text-muted);
-  margin-bottom: 4px;
-}
-
-.kpi-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-}
-
-.kpi-hint {
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--pb-text-muted);
-}
 
 /* Filters */
 .filters {
@@ -550,12 +517,6 @@ code {
 .chip:hover {
   border-color: var(--pb-line-strong);
   color: var(--pb-text);
-}
-
-.chip.active {
-  background: var(--pb-accent-quiet);
-  border-color: rgba(91, 141, 239, 0.45);
-  color: var(--pb-accent-hover);
 }
 
 .toggle {
@@ -624,18 +585,6 @@ code {
   margin-bottom: 24px;
 }
 
-@media (min-width: 640px) {
-  .card-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 1000px) {
-  .card-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
 .project-card {
   display: flex;
   flex-direction: column;
@@ -650,14 +599,8 @@ code {
   min-height: 160px;
 }
 
-.project-card:hover {
-  background: var(--pb-surface-hover);
-  border-color: var(--pb-line-strong);
-  transform: translateY(-1px);
-}
-
 .project-card-starred {
-  border-color: rgba(230, 180, 80, 0.45);
+  border-color: var(--pb-signal-warn);
 }
 
 .card-main-link {
@@ -673,13 +616,6 @@ code {
 .card-main-link:hover {
   text-decoration: none;
   color: inherit;
-}
-
-.card-top {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
 }
 
 .card-actions {
@@ -744,25 +680,6 @@ code {
   letter-spacing: -0.02em;
 }
 
-.card-summary {
-  margin: 0;
-  color: var(--pb-text-secondary);
-  font-size: 0.9rem;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  flex: 1;
-}
-
-.card-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  margin-top: auto;
-}
-
 .card-badges {
   display: flex;
   flex-wrap: wrap;
@@ -776,7 +693,6 @@ code {
 }
 
 /* Status / type chips */
-.status-chip,
 .type-chip,
 .badge,
 .tag {
@@ -790,29 +706,6 @@ code {
   letter-spacing: 0.02em;
 }
 
-.status-chip {
-  color: var(--pb-text-inverse);
-}
-
-.status-idea {
-  background: var(--pb-status-idea);
-}
-.status-planned {
-  background: var(--pb-status-planned);
-}
-.status-in_progress {
-  background: var(--pb-status-progress);
-}
-.status-paused {
-  background: var(--pb-status-paused);
-}
-.status-done {
-  background: var(--pb-status-done);
-}
-.status-archived {
-  background: var(--pb-status-archived);
-}
-
 .type-chip {
   background: var(--pb-surface-base);
   border: 1px solid var(--pb-line);
@@ -822,7 +715,7 @@ code {
 .badge-overdue {
   background: var(--pb-signal-danger-quiet);
   color: var(--pb-signal-danger);
-  border: 1px solid rgba(240, 113, 120, 0.35);
+  border: 1px solid var(--pb-signal-danger);
 }
 
 .badge-risk {
@@ -831,7 +724,7 @@ code {
 }
 
 .badge-idle {
-  background: rgba(148, 163, 184, 0.15);
+  background: transparent;
   color: var(--pb-text-muted);
 }
 
@@ -1004,21 +897,6 @@ code {
   margin-bottom: 16px;
 }
 
-.detail-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-}
-
-@media (min-width: 800px) {
-  .detail-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-  .panel-wide {
-    grid-column: 1 / -1;
-  }
-}
-
 .field {
   display: flex;
   flex-direction: column;
@@ -1103,7 +981,7 @@ code {
 
 .step-item.step-drag-over {
   border-color: var(--pb-accent);
-  background: var(--primary-soft, color-mix(in srgb, var(--pb-accent) 12%, transparent));
+  background: transparent;
 }
 
 .step-handle {
@@ -1158,7 +1036,7 @@ code {
 }
 
 .step-move-btn:hover:not(:disabled) {
-  background: var(--bg-elevated, var(--pb-line));
+  background: var(--pb-line);
   color: var(--pb-text);
 }
 
@@ -1289,9 +1167,7 @@ a.link-chip-main:hover {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  background: var(--warn-soft, color-mix(in srgb, var(--pb-signal-warn) 14%, transparent));
   color: var(--pb-text);
-  border: 1px solid color-mix(in srgb, var(--pb-signal-warn) 35%, var(--pb-line));
 }
 
 .banner-nudge p {
@@ -1308,7 +1184,7 @@ a.link-chip-main:hover {
 }
 
 .banner-nudge-inline {
-  background: var(--warn-soft, color-mix(in srgb, var(--pb-signal-warn) 14%, transparent));
+  background: var(--pb-signal-warn-quiet);
   color: var(--pb-text);
   border: 1px solid color-mix(in srgb, var(--pb-signal-warn) 35%, var(--pb-line));
   margin: 8px 0;
@@ -1390,16 +1266,6 @@ a.link-chip-main:hover {
   margin: 0;
   padding: 10px 12px;
   border-radius: var(--pb-radius-sm);
-}
-
-.banner.success {
-  background: var(--pb-signal-ok-quiet);
-  color: var(--pb-signal-ok);
-}
-
-.banner.error {
-  background: var(--pb-signal-danger-quiet);
-  color: var(--pb-signal-danger);
 }
 
 /* Board (kanban) */
@@ -1566,34 +1432,12 @@ a.link-chip-main:hover {
   text-decoration: none;
 }
 
-.board-card-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.board-card-progress {
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--pb-text-muted);
-}
-
 .board-card-title {
   margin: 0;
   font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.3;
-}
-
-.board-card-footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  margin-top: 2px;
 }
 
 .board-card-handle {
@@ -1610,23 +1454,6 @@ a.link-chip-main:hover {
 
 .board-empty-hint {
   margin-top: 8px;
-}
-
-/*
- * Narrow-only swipe hint. Static instructional copy (no dismiss control): it
- * removes itself once the reader scrolls, and it names the keyboard and detail
- * page routes so dragging never reads as the only way to change status.
- */
-.board-scroll-hint {
-  margin: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--pb-line);
-  border-left: 3px solid var(--pb-accent);
-  border-radius: var(--pb-radius-sm);
-  background: var(--pb-surface-raised);
-  color: var(--pb-text-secondary);
-  font-size: 0.8rem;
-  line-height: 1.45;
 }
 
 /*
@@ -2041,7 +1868,6 @@ a.link-chip-main:hover {
     position: fixed;
     inset: 0;
     z-index: 40;
-    background: rgba(0, 0, 0, 0.45);
   }
 
   .menu-sheet {
@@ -2134,14 +1960,6 @@ a.link-chip-main:hover {
     min-height: var(--touch);
   }
 
-  /* KPI: tighter padding on small screens */
-  .kpi-card {
-    padding: 10px 12px;
-  }
-
-  .kpi-value {
-    font-size: 1.35rem;
-  }
 }
 
 /* Notes edit / preview */
@@ -2240,7 +2058,6 @@ a.link-chip-main:hover {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: rgba(0, 0, 0, 0.55);
 }
 
 .shortcut-panel {
@@ -2463,7 +2280,7 @@ a.link-chip-main:hover {
 }
 
 .due-soon-item.due-overdue {
-  border-color: rgba(240, 113, 120, 0.45);
+  border-color: var(--pb-signal-danger);
   background: var(--pb-signal-danger-quiet);
 }
 
@@ -2473,7 +2290,7 @@ a.link-chip-main:hover {
 }
 
 .due-soon-item.due-soon {
-  border-color: rgba(230, 180, 80, 0.4);
+  border-color: var(--pb-signal-warn);
   background: var(--pb-signal-warn-quiet);
 }
 
@@ -2681,7 +2498,6 @@ a.link-chip-main:hover {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: rgba(0, 0, 0, 0.55);
 }
 
 .import-panel {
@@ -2958,20 +2774,6 @@ a.link-chip-main:hover {
   font-size: var(--pb-font-body);
 }
 
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--pb-text-muted);
-}
-
-.status-dot.status-idea { background: var(--pb-status-idea); }
-.status-dot.status-planned { background: var(--pb-status-planned); }
-.status-dot.status-in_progress { background: var(--pb-status-progress); }
-.status-dot.status-paused { background: var(--pb-status-paused); }
-.status-dot.status-done { background: var(--pb-status-done); }
-.status-dot.status-archived { background: var(--pb-status-archived); }
-
 .due-soon-item-meta {
   justify-self: end;
   color: var(--pb-text-muted);
@@ -2979,14 +2781,6 @@ a.link-chip-main:hover {
   font-weight: var(--pb-font-meta-weight);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.due-soon-item.due-overdue .due-soon-item-meta {
-  color: var(--pb-signal-danger);
-}
-
-.due-soon-item.due-soon .due-soon-item-meta {
-  color: var(--pb-signal-warn);
 }
 
 .card-grid {
@@ -3336,19 +3130,6 @@ a.link-chip-main:hover {
   gap: var(--pb-space-6);
   padding: 10px 12px;
   min-height: 44px;
-}
-
-.board-card-top {
-  gap: var(--pb-space-6);
-}
-
-.board-card-top .type-chip {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--pb-text-muted);
-  font-size: var(--pb-font-meta);
 }
 
 .board-card-title {
