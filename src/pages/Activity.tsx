@@ -8,6 +8,7 @@ const TYPE_LABELS: Record<ActivityType, string> = {
   project_created: 'Created',
   status_changed: 'Status',
   step_toggled: 'Step',
+  focus_session: 'Focus',
   project_deleted: 'Deleted',
   import: 'Import',
   seed: 'Seed',

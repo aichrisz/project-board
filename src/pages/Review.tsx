@@ -5,6 +5,7 @@ import {
   computeReviewKpis,
   suggestReviewActions,
 } from '../lib/review';
+import { focusMinutesInLocalWeek } from '../lib/focusSession';
 import { openWeeklySnapshot } from '../lib/snapshot';
 import { useProjects } from '../store/ProjectContext';
 import { STATUS_LABELS, TYPE_LABELS } from '../types';
@@ -48,7 +49,7 @@ function ProjectListSection({
 }
 
 export function Review() {
-  const { projects, settings, softArchiveIdle, exportData, ready } =
+  const { projects, settings, focus, softArchiveIdle, exportData, ready } =
     useProjects();
   const [message, setMessage] = useState<string | null>(null);
 
@@ -63,6 +64,10 @@ export function Review() {
   const suggestions = useMemo(
     () => suggestReviewActions(projects, settings),
     [projects, settings],
+  );
+  const focusMinutes = useMemo(
+    () => focusMinutesInLocalWeek(focus.history),
+    [focus.history],
   );
 
   function handleSoftArchiveIdle() {
@@ -129,6 +134,12 @@ export function Review() {
         <div className="kpi-cell">
           <div className="kpi-label">Due ≤7d</div>
           <div className="kpi-figure">{kpis.dueSoon}</div>
+        </div>
+        <div className="kpi-cell">
+          <div className="kpi-label">Focus (wk)</div>
+          <div className="kpi-figure">
+            {focusMinutes} <span className="kpi-hint">min</span>
+          </div>
         </div>
       </div>
 

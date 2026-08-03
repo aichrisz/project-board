@@ -22,10 +22,40 @@ export type ActivityType =
   | 'project_created'
   | 'status_changed'
   | 'step_toggled'
+  | 'focus_session'
   | 'project_deleted'
   | 'import'
   | 'seed'
   | 'reset';
+
+export type FocusOutcome = 'completed' | 'stopped' | 'expired';
+
+export interface ActiveFocusSession {
+  id: string;
+  projectId: string;
+  stepId?: string;
+  startedAt: string;
+  endsAt: string;
+  stoppedAt?: string;
+  plannedMinutes: 15 | 25 | 45 | 60;
+}
+
+export interface FocusSessionRecord {
+  id: string;
+  projectId: string;
+  stepId?: string;
+  startedAt: string;
+  endedAt: string;
+  plannedMinutes: 15 | 25 | 45 | 60;
+  elapsedSeconds: number;
+  outcome: FocusOutcome;
+  note?: string;
+}
+
+export interface FocusState {
+  active: ActiveFocusSession | null;
+  history: FocusSessionRecord[];
+}
 
 export interface Step {
   id: string;
@@ -81,6 +111,7 @@ export interface StorageBlob {
   version: 1;
   projects: Project[];
   settings: AppSettings;
+  focus?: FocusState;
 }
 
 export type SortKey = 'updated' | 'deadline' | 'progress' | 'title';

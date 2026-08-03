@@ -3,9 +3,9 @@
 **Document type:** Portable product specification  
 **Audience:** Any AI or engineer implementing, reviewing, or extending the app  
 **Product name:** Project Board  
-**Current version:** 0.9.0 (accessibility & mobile field use)\
-**Current shipped capability:** all features through **v0.9.0**\
-**Last updated:** 2026-07-31
+**Current documented version:** 0.11.0 (Focus Session)\
+**Current shipped capability:** all features through **v0.11.0**; visible runtime version chrome remains **v0.10.0** while version chrome work is deferred because of existing lockfile metadata drift\
+**Last updated:** 2026-08-03
 
 This document is **self-contained**. It describes *what the product is* and *what features exist*. It does **not** depend on a specific host, owner name, or agent toolchain.
 
@@ -107,11 +107,67 @@ Capped log (~100): project created/deleted, status change, step toggle, import, 
 {
   "version": 1,
   "projects": [ /* Project[] */ ],
-  "settings": { /* AppSettings */ }
+  "settings": { /* AppSettings */ },
+  "focus": { /* optional FocusState; additive within version 1 */ }
 }
 ```
 
 Activity may be stored separately or alongside depending on implementation; projects + settings are the canonical export payload.
+
+### 4.6 Focus Session
+
+Focus state is stored in the existing `project-board-v1` blob as an optional
+field. When present, `focus` contains required `active` (null or an active
+session) and `history` array. `version` remains `1`; older blobs without `focus`
+load as `{ active: null, history: [] }`.
+
+| Field | Type / notes |
+|-------|--------------|
+| `active` | `ActiveFocusSession` or null; one global session, with `projectId`, optional `stepId`, canonical UTC `startedAt` / `endsAt`, optional `stoppedAt`, and `plannedMinutes` of 15, 25, 45, or 60 |
+| `history` | Newest-first `FocusSessionRecord[]`, capped at 250; each record has `projectId`, optional `stepId` / `note`, canonical UTC `startedAt` / `endedAt`, `plannedMinutes`, derived integer `elapsedSeconds`, and outcome `completed` \| `stopped` \| `expired` |
+
+The Dashboard and Project Detail start the session. `endsAt` is the authoritative
+absolute timer boundary, so reload, navigation, tab close, browser restart, sleep,
+and expiry recover from timestamps; the visible countdown is not persisted per
+second. Stop stores `stoppedAt` immediately, clamped canonically as
+`min(max(now, startedAt), endsAt)`, and keeps `active` present for explicit
+resolution. Finalization uses `stoppedAt` as the `endedAt` and elapsed boundary,
+not the later time at which the resolver is opened or submitted.
+
+The step link is optional and must point to an unfinished step while active. The
+resolver can explicitly mark that linked step done, keep working, or save/finish
+with an optional note. Expiry and restoration never complete a step automatically.
+If the linked step is completed or removed elsewhere, only the active `stepId` is
+cleared and the session continues; the resolver then cannot offer Mark step done.
+
+Focus imports use the existing pre-apply validation boundary. They require the
+allowed presets and outcomes, existing project/step references, valid calendar
+dates in canonical ISO UTC `Z` form (optional millisecond precision), derived
+`elapsedSeconds`, and the exact planned end/full duration for `expired` records.
+Duplicate history ids are deduped deterministically before final ordering and the
+cap: sort by `endedAt` descending, then `id` ascending, and keep the first id.
+Local finalization trims history to 250; an import that remains over 250 after
+dedupe is rejected. If a hand-edited import points `focus.active` at a completed
+step, remove that block or re-export. If `elapsedSeconds` no longer matches its
+timestamps, correct the value or restore an untruncated backup.
+
+Export includes the top-level `focus` object; legacy backups may omit that field.
+When present, `focus` contains required `active` (null or an active session) and
+`history` array, including `active.stoppedAt`. Replace restores validated
+imported focus, or empty focus when the field is absent. Merge preserves the
+local active session and ignores imported active state; it unions history by
+record id, keeps the local record on an id collision, sorts newest-first, caps at
+250, and prunes references against the post-merge projects.
+Project deletion clears its active session and removes its history; full reset
+clears focus; seed loading never creates focus records, and seed replacement
+prunes focus against the resulting seed projects.
+
+The Focus Session drawer uses the shared accessible dialog lifecycle: focus enters
+on open, `Tab` / `Shift+Tab` wrap within the drawer, `Escape` closes without
+stopping the session, and focus returns to the opener. Dashboard Current focus,
+Project Detail's neutral weekly summary, Activity focus events, and Review's
+focus-minutes aggregate are informational and do not create scores, streaks,
+grades, or recommendations.
 
 ---
 
@@ -132,7 +188,9 @@ Activity may be stored separately or alongside depending on implementation; proj
 
 ## 6. Feature inventory by version
 
-Use this as a capability checklist. Versions are incremental; **current ship = all rows through 0.9.0**. Version 0.8.2 added no product features (documentation and release metadata only).
+Use this as a capability checklist. Versions are incremental; **current documented
+ship = all rows through 0.11.0**. Version 0.8.2 added no product features
+(documentation and release metadata only).
 
 ### 6.1 v0.1 — MVP
 
@@ -253,6 +311,61 @@ migration, backend, telemetry, cloud sync, or GitHub Pages strategy change;
 desktop Board layout, drag-to-change-status, and the Board's intentional internal
 horizontal scroll behavior are preserved.
 
+### 6.11 v0.11 — Focus Session (current documented capability)
+
+1. **Global sessions and presets** — Dashboard and Project Detail start one
+   global session using 15, 25, 45, or 60 minutes (25 by default), optionally
+   linked to one unfinished step. Confirming a new session while another is
+   active finalizes the old one as stopped before starting the new one.
+2. **Absolute-time recovery** — `startedAt` and `endsAt` are canonical absolute
+   timestamps; reload and browser lifecycle changes recalculate the remaining
+   time, with no per-second persistence. An expired session remains available to
+   resolve instead of being silently discarded.
+3. **Stop and explicit resolver** — Stop persists `stoppedAt`, clamped
+   canonically as `min(max(now, startedAt), endsAt)`, while leaving the session
+   active and resolvable. Finalization uses `stoppedAt` for `endedAt` and
+   `elapsedSeconds`, so resolving later does not add waiting time. The resolver
+   offers Mark step done only for an unfinished linked step, Keep working, and
+   an optional note or finish without a note. Expiry and restoration never
+   auto-complete a step.
+4. **External step cleanup** — Completing or removing the linked step through
+   ordinary project/step actions clears only the active session's `stepId`; the
+   timer and session remain. A completed focus outcome can only come from the
+   explicit resolver action.
+5. **History and strict import validation** — Finalized history is newest-first
+   and capped at 250. Imports validate the allowed presets/outcomes, existing
+   references, valid calendar dates in canonical ISO UTC `Z` form (optional
+   milliseconds), derived integer `elapsedSeconds`, and exact planned boundaries
+   for expired records. Duplicate imported history ids are deterministically
+   deduped before ordering/cap by `endedAt` descending, then `id` ascending;
+   histories still over 250 after dedupe are rejected. Recovery for a completed
+   linked-step import error is to remove `focus.active` or re-export; recovery for
+   a derived-elapsed mismatch is to correct the value or restore an untruncated
+   backup.
+6. **Export/import and cleanup** — Existing v1 JSON export carries the top-level
+   `focus` object; legacy backups may omit that field. When present, it contains
+   required `active` (null or an active session) and `history` array, including
+   `active.stoppedAt`. Replace restores imported focus (or empty focus when
+   absent); merge preserves the local active session, ignores incoming active
+   state, and merges history by id with local collisions winning, newest-first
+   ordering, and the 250 cap. Deleting a project clears its active session and
+   history. Reset clears focus. Seed loading never fabricates focus records; seed
+   replacement prunes focus against the resulting projects.
+7. **Accessible surfaces** — The shared dialog focus lifecycle moves focus into
+   the drawer, wraps `Tab` / `Shift+Tab`, closes on `Escape` without stopping the
+   session, and restores focus to the opener. Dashboard Current focus, the
+   Project Detail weekly summary, Activity events, and the Review focus-minutes
+   aggregate are informational rather than scores, streaks, grades, or
+   recommendations.
+
+**Version boundary:** this feature is documented as v0.11.0, but visible runtime
+version chrome remains v0.10.0. `package.json`, `package-lock.json`, and
+`src/version.ts` are intentionally untouched; version chrome work is deferred
+because the existing lockfile root metadata already drifts from `package.json`.
+No new dependency, storage key, route, keyboard shortcut, telemetry, analytics,
+notification, or network behavior was added. The existing v0.9 accessibility and
+v0.10 visual contracts remain in force.
+
 ---
 
 ## 7. Cross-cutting behaviors
@@ -321,7 +434,7 @@ src/
 
 ## 10. Acceptance / verify checklist (current product)
 
-An implementation is “feature-complete for 0.9” if:
+An implementation is “feature-complete for 0.11” if:
 
 - [ ] `npm run build` succeeds  
 - [ ] Create/edit/delete project works and survives reload  
@@ -334,7 +447,7 @@ An implementation is “feature-complete for 0.9” if:
 - [ ] Focus chip + URL work  
 - [ ] Duplicate creates idea copy with unchecked steps  
 - [ ] Link chips safe for http(s) / path-like  
-- [ ] Footer/chrome shows **v0.9.0**
+- [ ] Footer/chrome remains **v0.10.0**; v0.11 is documented while version chrome is deferred because of existing lockfile metadata drift
 - [ ] Import rejects malformed, unsafe, or oversized files with a plain-language message
 - [ ] `/review` weekly review works  
 - [ ] Board keyboard status/focus works, and an owned key at a boundary neither scrolls the page nor opens the card
@@ -342,6 +455,11 @@ An implementation is “feature-complete for 0.9” if:
 - [ ] Mobile menu and `?` shortcuts dialog: focus enters on open, `Tab` / `Shift+Tab` stay inside, `Escape` closes, focus returns to the opener
 - [ ] Narrow (`≤767px`) Board shows the swipe hint only while the columns overflow, as static non-focusable text, and drops it after a short horizontal scroll
 - [ ] Narrow empty Board keeps `Create one` above the fold; desktop Board layout and internal horizontal scroll unchanged
+- [ ] Focus starts globally with the 15 / 25 / 45 / 60 minute presets and restores from absolute timestamps without per-second persistence
+- [ ] Stop persists `stoppedAt`; resolver elapsed uses that boundary; expiry and external step changes never auto-complete a step
+- [ ] Focus history is newest-first and capped at 250; UTC timestamps and derived elapsed values are strictly validated, with deterministic duplicate-id dedupe and documented recovery paths
+- [ ] Export/import preserves focus active/history (including `stoppedAt`), with replace and merge semantics; project deletion, reset, and seed cleanup leave no orphaned focus state
+- [ ] Focus drawer moves focus in, wraps Tab navigation, closes on Escape without stopping, and restores focus to its opener
 - [ ] `npm test`, `npm run lint`, `npm run build`, and `npm run build:pages` pass with no dependency change
 - [ ] No personal name required in product UI chrome  
 - [ ] Storage key remains `project-board-v1` (settings fields migrate additively)  
@@ -363,7 +481,7 @@ Possible later themes (only if product owner approves a plan):
 
 1. Treat **§2 principles** as hard constraints.  
 2. Treat **§6** as the feature backlog already shipped (do not re-propose v0.1–v0.5 as “new” unless fixing bugs).  
-3. For new work: propose a **post-v0.9 plan** against gaps only; keep local-first.
+3. For new work: propose a **post-v0.11 plan** against gaps only; keep local-first.
 4. Prefer small, versioned increments with verify via `npm run build` + manual smoke of routes above.  
 5. Keep UI English and product name **Project Board**.  
 
@@ -378,7 +496,8 @@ Possible later themes (only if product owner approves a plan):
 | Soft archive | Set status archived with short undo window |
 | Realistic inventory seed | Built-in template projects for demo/bootstrap |
 | Focus this week | Filter: starred ∪ due-soon/overdue ∪ in_progress |
+| Focus Session | One persisted timer with explicit resolution and optional unfinished-step link |
 
 ---
 
-*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.9.0 (shipped capability through v0.9.0).*
+*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.11.0 (documented shipped capability through v0.11.0; runtime version chrome remains v0.10.0).*

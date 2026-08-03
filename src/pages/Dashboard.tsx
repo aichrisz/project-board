@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { DueSoonStrip } from '../components/DueSoonStrip';
 import { EmptyState } from '../components/EmptyState';
+import {
+  FocusSessionDrawer,
+  focusBandLabel,
+} from '../components/FocusSessionDrawer';
 import { Filters, type FilterState } from '../components/Filters';
 import { KpiRow } from '../components/KpiRow';
 import { Onboarding } from '../components/Onboarding';
@@ -11,6 +15,7 @@ import { StatsPanel } from '../components/StatsPanel';
 import { Toast } from '../components/Toast';
 import { getDueSoonProjects } from '../lib/dueSoon';
 import { isExportStale } from '../lib/exportAge';
+import { getRemainingSeconds, isReadyToResolve } from '../lib/focusSession';
 import {
   defaultFilterState,
   filtersFromSearchParams,
@@ -30,6 +35,11 @@ type UndoToast = {
   message: string;
   previousStatus: ProjectStatus;
   projectId: string;
+};
+
+type FocusDrawerState = {
+  open: boolean;
+  projectId: string | null;
 };
 
 function readNudgeDismissed(): boolean {
@@ -52,6 +62,7 @@ export function Dashboard() {
   const {
     projects,
     settings,
+    focus,
     setShowCompleted,
     ready,
     updateProject,
@@ -63,7 +74,43 @@ export function Dashboard() {
   const [onboardingSkipped, setOnboardingSkipped] = useState(false);
   const [undoToast, setUndoToast] = useState<UndoToast | null>(null);
   const [nudgeDismissed, setNudgeDismissed] = useState(readNudgeDismissed);
+  const [focusDrawer, setFocusDrawer] = useState<FocusDrawerState>({
+    open: false,
+    projectId: null,
+  });
+  const [focusNowMs, setFocusNowMs] = useState(() => Date.now());
   const hydrated = useRef(false);
+  const focusTriggerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const active = focus.active;
+    if (!active) return;
+
+    let intervalId: number | undefined;
+    const refresh = () => {
+      const now = Date.now();
+      setFocusNowMs(now);
+      if (isReadyToResolve(active, now) && intervalId !== undefined) {
+        window.clearInterval(intervalId);
+        intervalId = undefined;
+      }
+    };
+    refresh();
+
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    if (!isReadyToResolve(active, Date.now())) {
+      intervalId = window.setInterval(refresh, 1_000);
+    }
+
+    return () => {
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+      if (intervalId !== undefined) window.clearInterval(intervalId);
+    };
+  }, [
+    focus.active,
+  ]);
 
   const [filters, setFilters] = useState<FilterState>({
     status: 'active',
@@ -299,6 +346,19 @@ export function Dashboard() {
     setNudgeDismissed(true);
   }, []);
 
+  const openFocusDrawer = useCallback(
+    (projectId: string, trigger?: HTMLElement | null) => {
+      focusTriggerRef.current =
+        trigger ?? (document.activeElement as HTMLElement | null);
+      setFocusDrawer({ open: true, projectId });
+    },
+    [],
+  );
+
+  const closeFocusDrawer = useCallback(() => {
+    setFocusDrawer((current) => ({ ...current, open: false }));
+  }, []);
+
   if (!ready) {
     return <p className="muted">Loading…</p>;
   }
@@ -306,6 +366,19 @@ export function Dashboard() {
   const isEmptyBoard = projects.length === 0;
   const showOnboarding = isEmptyBoard && !onboardingSkipped;
   const showBackupNudge = !isEmptyBoard && exportStale && !nudgeDismissed;
+  const currentFocus = focus.active;
+  const currentFocusProject = currentFocus
+    ? projects.find((project) => project.id === currentFocus.projectId)
+    : undefined;
+  const currentFocusReady = currentFocus
+    ? isReadyToResolve(currentFocus, focusNowMs)
+    : false;
+  const currentFocusLabel = currentFocus
+    ? focusBandLabel(
+        getRemainingSeconds(currentFocus.endsAt, focusNowMs),
+        currentFocusReady,
+      )
+    : '';
 
   return (
     <div className="dashboard">
@@ -350,6 +423,32 @@ export function Dashboard() {
                 </button>
               </div>
             </div>
+          )}
+
+          {currentFocus && (
+            <section className="focus-session-band" aria-label="Current focus">
+              <div className="focus-session-band-content">
+                <p className="section-label">Current focus</p>
+                <Link
+                  to={`/project/${currentFocus.projectId}`}
+                  className="focus-session-band-project"
+                >
+                  {currentFocusProject?.title ?? currentFocus.projectId}
+                </Link>
+                <span className="focus-session-band-state">
+                  {currentFocusLabel}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={(event) =>
+                  openFocusDrawer(currentFocus.projectId, event.currentTarget)
+                }
+              >
+                Open
+              </button>
+            </section>
           )}
 
           {!isEmptyBoard && (
@@ -423,6 +522,7 @@ export function Dashboard() {
                   onAddStep={addStep}
                   onArchive={onArchive}
                   onDuplicate={onDuplicate}
+                  onStartFocus={openFocusDrawer}
                 />
               ))
             )}
@@ -447,6 +547,13 @@ export function Dashboard() {
           durationMs={5000}
         />
       )}
+
+      <FocusSessionDrawer
+        open={focusDrawer.open}
+        projectId={focusDrawer.projectId ?? ''}
+        onClose={closeFocusDrawer}
+        triggerRef={focusTriggerRef}
+      />
     </div>
   );
 }

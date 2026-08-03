@@ -1,7 +1,7 @@
 import { useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import { Link } from 'react-router';
 import type { Project } from '../types';
-import { STATUS_LABELS, TYPE_LABELS } from '../types';
+import { ACTIVE_STATUSES, STATUS_LABELS, TYPE_LABELS } from '../types';
 import { LinkChips } from './LinkChips';
 
 type Props = {
@@ -11,6 +11,7 @@ type Props = {
   onAddStep: (projectId: string, title: string) => void;
   onArchive: (id: string) => void;
   onDuplicate?: (id: string) => void;
+  onStartFocus?: (id: string) => void;
 };
 
 export function ProjectCard({
@@ -19,6 +20,7 @@ export function ProjectCard({
   onAddStep,
   onArchive,
   onDuplicate,
+  onStartFocus,
 }: Props) {
   const [adding, setAdding] = useState(false);
   const [stepDraft, setStepDraft] = useState('');
@@ -39,6 +41,7 @@ export function ProjectCard({
   }
 
   const canArchive = project.status !== 'archived';
+  const canStartFocus = ACTIVE_STATUSES.includes(project.status);
 
   return (
     <article
@@ -141,6 +144,18 @@ export function ProjectCard({
           </form>
         ) : (
           <div className="card-quick-row">
+            {onStartFocus && canStartFocus && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm focus-session-start"
+                onClick={(e) => {
+                  stop(e);
+                  onStartFocus(project.id);
+                }}
+              >
+                Start focus
+              </button>
+            )}
             <button
               type="button"
               className="btn btn-ghost btn-sm"

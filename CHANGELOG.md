@@ -2,6 +2,79 @@
 
 All notable changes to Project Board. Local-first single-user app; dates are UTC.
 
+## 0.11.0 — Focus Session (2026-08-03)
+
+This entry documents the shipped Focus Session as **v0.11**. Runtime/package
+version chrome remains **v0.10.0**: updating it is deferred because the existing
+`package-lock.json` root metadata already drifts from `package.json`. `package.json`,
+`package-lock.json`, and `src/version.ts` are intentionally unchanged.
+
+### Added
+
+- **Global Focus Session.** Dashboard and Project Detail can start one global
+  session at a time using 15, 25, 45, or 60 minutes (25 minutes is the default),
+  optionally linked to one unfinished project step.
+- **Timestamp-based recovery.** Sessions persist canonical absolute `startedAt`
+  and `endsAt` instants, so reload, tab close, SPA navigation, browser restart,
+  sleep, and expiry recover from wall-clock time. The visible clock redraws locally;
+  timer ticks are not persisted per second.
+- **Stop and explicit resolution.** Stop persists `active.stoppedAt` immediately,
+  clamped canonically as `min(max(now, startedAt), endsAt)`, and keeps the active
+  session in a ready-to-resolve state across refresh. Finalization uses `stoppedAt`
+  as both `endedAt` and the elapsed boundary, so resolving later cannot inflate
+  `elapsedSeconds`. Expiry
+  also requires an explicit resolver action: mark the linked step done, keep
+  working, save an optional note, or finish without a note. Mark step done is
+  offered only for an unfinished linked step; expiry and restore never complete a
+  step automatically.
+- **Step-link safety.** Completing or removing the linked step elsewhere clears
+  only the active session's `stepId`; the session and timer continue. A completed
+  outcome is produced only by the resolver's explicit step action.
+- **Bounded history.** Finalized sessions are newest-first and capped at 250
+  records. Outcomes are `completed`, `stopped`, or `expired`, with derived integer
+  `elapsedSeconds` and optional notes. Focus finalization adds one focus activity
+  event (plus the existing step event when the resolver completes a step).
+- **Strict, recoverable import validation.** Focus imports accept only the four
+  presets, supported outcomes, existing project/step references, valid calendar
+  dates in canonical ISO UTC `Z` form, and elapsed values derived from the stored
+  boundaries. Expired records must end exactly at their planned `endsAt` and carry
+  the full planned duration. Duplicate history ids are deterministically deduped
+  before ordering and the cap: newest `endedAt` wins, with ascending `id` as the
+  tie-breaker. If a hand-edited file points `focus.active` at a completed step,
+  remove that `focus.active` block or re-export; if a re-serialized file has a
+  mismatched derived `elapsedSeconds`, correct it or restore an untruncated backup.
+- **Focus-aware backup.** Existing v1 JSON export includes the top-level `focus`
+  object; legacy backups may omit that field. When present, `focus` contains
+  required `active` (null or an active session) and `history` array, including
+  `active.stoppedAt`. Replace import restores validated active/history state (or
+  empty focus when absent). Merge preserves the local active session, ignores an
+  incoming active session, and unions history by id with local records winning id
+  collisions, newest-first ordering, and the 250 cap.
+- **Cleanup and accessible drawer.** Deleting a project clears its active session
+  and history; full reset clears focus; seed loading never fabricates focus records
+  and seed replacement prunes focus against the resulting projects. The drawer is
+  a modal with the shared focus lifecycle: focus enters on open, Tab and
+  Shift+Tab wrap, Escape closes without stopping the session, and focus returns to
+  the opener. Phase changes are announced without announcing every clock tick.
+
+### Changed
+
+- Dashboard exposes a Current focus band, Project Detail shows a neutral weekly
+  focus summary, Activity renders finalized focus events, and Weekly Review adds a
+  focus-minutes aggregate. These surfaces are informational; no score, streak,
+  grade, or focus-derived recommendation is created.
+- Focus timestamps written by the app use canonical UTC `Z` instants; optional
+  millisecond precision is accepted for portable backups.
+
+### Unchanged
+
+- No new dependency, storage key, route, keyboard shortcut, notification,
+  network call, telemetry, or analytics. Focus is an optional field in the
+  existing `version: 1` `project-board-v1` blob; the activity key and its cap are
+  unchanged.
+- Existing v0.9 accessibility, v0.10 visual, import, Board, PWA, deployment, and
+  local-first contracts remain in force.
+
 ## 0.9.0 — Accessibility & mobile field use (2026-07-31)
 
 ### Fixed

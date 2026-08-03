@@ -10,7 +10,7 @@ import {
   toExportJson,
 } from './export';
 import { DEFAULT_SETTINGS } from '../types';
-import type { Project, StorageBlob } from '../types';
+import type { FocusState, Project, StorageBlob } from '../types';
 
 function makeProject(overrides: Partial<Project> = {}): Project {
   return {
@@ -523,5 +523,38 @@ describe('summarizeImport', () => {
     assert.equal(summary.newIds, 1);
     assert.equal(summary.overlappingIds, 1);
     assert.deepEqual(summary.sampleTitles, ['Alpha 2', 'Beta']);
+  });
+});
+
+describe('focus export compatibility', () => {
+  it('round-trips optional focus state, including stoppedAt', () => {
+    const focus: FocusState = {
+      active: {
+        id: 'active-1',
+        projectId: 'p1',
+        startedAt: '2026-08-03T09:00:00.000Z',
+        endsAt: '2026-08-03T09:25:00.000Z',
+        stoppedAt: '2026-08-03T09:01:00.000Z',
+        plannedMinutes: 25,
+      },
+      history: [
+        {
+          id: 'record-1',
+          projectId: 'p1',
+          startedAt: '2026-08-03T08:00:00.000Z',
+          endedAt: '2026-08-03T08:01:00.000Z',
+          plannedMinutes: 25,
+          elapsedSeconds: 60,
+          outcome: 'stopped',
+        },
+      ],
+    };
+    const parsed = parseImportJson(toExportJson({ ...makeBlob(), focus }));
+    assert.deepEqual(parsed.focus, focus);
+  });
+
+  it('keeps exports without focus backward compatible', () => {
+    const parsed = parseImportJson(toExportJson(makeBlob()));
+    assert.deepEqual(parsed.focus, { active: null, history: [] });
   });
 });

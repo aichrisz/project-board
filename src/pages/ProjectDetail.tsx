@@ -1,14 +1,19 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
+import {
+  FocusSessionDrawer,
+  focusOutcomeLabel,
+} from '../components/FocusSessionDrawer';
 import { LinkChips } from '../components/LinkChips';
 import { ProjectForm } from '../components/ProjectForm';
 import { StepList } from '../components/StepList';
 import { Toast } from '../components/Toast';
 import { daysUntilDeadline, getHealth, isOverdue } from '../lib/health';
+import { focusWeekSummary } from '../lib/focusSession';
 import { createId } from '../lib/id';
 import { renderMarkdownSafe } from '../lib/markdown';
 import { useProjects } from '../store/ProjectContext';
-import type { LinkItem, ProjectStatus, ProjectType } from '../types';
+import type { FocusOutcome, LinkItem, ProjectStatus, ProjectType } from '../types';
 import {
   PROJECT_STATUSES,
   PROJECT_TYPES,
@@ -21,6 +26,21 @@ type UndoToast = {
   previousStatus: ProjectStatus;
   projectId: string;
 };
+
+const FOCUS_OUTCOMES: FocusOutcome[] = ['completed', 'stopped', 'expired'];
+
+function focusSummaryBreakdown(summary: ReturnType<typeof focusWeekSummary>): string {
+  const outcomeParts = FOCUS_OUTCOMES
+    .filter((outcome) => summary[outcome] > 0)
+    .map(
+      (outcome) =>
+        `${summary[outcome]} ${focusOutcomeLabel(outcome).toLowerCase()}`,
+    );
+  return [
+    `${summary.sessions} ${summary.sessions === 1 ? 'session' : 'sessions'}`,
+    ...outcomeParts,
+  ].join(' · ');
+}
 
 export function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -37,6 +57,7 @@ export function ProjectDetail() {
     setAllStepsDone,
     removeCompletedSteps,
     settings,
+    focus,
   } = useProjects();
   const project = id ? getProject(id) : undefined;
   const [editing, setEditing] = useState(false);
@@ -44,6 +65,8 @@ export function ProjectDetail() {
   const [linkLabel, setLinkLabel] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
   const [undoToast, setUndoToast] = useState<UndoToast | null>(null);
+  const [focusDrawerOpen, setFocusDrawerOpen] = useState(false);
+  const focusTriggerRef = useRef<HTMLElement | null>(null);
 
   const dismissToast = useCallback(() => setUndoToast(null), []);
 
@@ -52,6 +75,13 @@ export function ProjectDetail() {
     [project, settings.idleDays],
   );
   const days = project ? daysUntilDeadline(project) : null;
+  const focusSummary = useMemo(
+    () =>
+      project
+        ? focusWeekSummary(focus.history, { projectId: project.id })
+        : null,
+    [focus.history, project],
+  );
 
   if (!project) {
     return (
@@ -146,6 +176,18 @@ export function ProjectDetail() {
           >
             {project.starred ? '★ Starred' : '☆ Star'}
           </button>
+          {project.status !== 'archived' && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={(event) => {
+                focusTriggerRef.current = event.currentTarget;
+                setFocusDrawerOpen(true);
+              }}
+            >
+              Start focus
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-ghost"
@@ -305,6 +347,18 @@ export function ProjectDetail() {
         </section>
 
           <section className="panel detail-rail-panel">
+          <h2 className="panel-title">Focus this week</h2>
+          {focusSummary && focusSummary.sessions > 0 ? (
+            <>
+              <p className="kpi-figure">{focusSummary.minutes} min this week</p>
+              <p className="muted">{focusSummaryBreakdown(focusSummary)}</p>
+            </>
+          ) : (
+            <p className="muted">No focus sessions this week.</p>
+          )}
+        </section>
+
+          <section className="panel detail-rail-panel">
           <h2 className="panel-title">Meta</h2>
           <div className="field-row">
             <label className="field">
@@ -448,6 +502,13 @@ export function ProjectDetail() {
           durationMs={5000}
         />
       )}
+
+      <FocusSessionDrawer
+        open={focusDrawerOpen}
+        projectId={project.id}
+        onClose={() => setFocusDrawerOpen(false)}
+        triggerRef={focusTriggerRef}
+      />
     </div>
   );
 }

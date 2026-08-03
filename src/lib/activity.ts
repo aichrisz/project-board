@@ -37,8 +37,19 @@ export function clearActivity(): void {
 }
 
 export function prependActivity(
-  existing: ActivityEvent[],
+  existing: readonly ActivityEvent[],
   event: ActivityEvent,
 ): ActivityEvent[] {
   return [event, ...existing].slice(0, ACTIVITY_CAP);
+}
+
+/** Apply several already-created events to a newest-first activity snapshot. */
+export function prependActivityEvents(
+  existing: ActivityEvent[],
+  events: readonly ActivityEvent[],
+): ActivityEvent[] {
+  return events.reduce(
+    (next, event) => prependActivity(next, event),
+    existing,
+  );
 }

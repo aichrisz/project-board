@@ -1,5 +1,6 @@
 import type { Project, StorageBlob, ThemeMode } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
+import { normalizeFocusState } from './focusSession';
 import { withAutoProgress } from './progress';
 
 export const STORAGE_KEY = 'project-board-v1';
@@ -40,6 +41,7 @@ export function loadStorage(): StorageBlob | null {
         theme: parseTheme(parsed.settings?.theme),
         lastExportAt: parseLastExportAt(parsed.settings?.lastExportAt),
       },
+      focus: normalizeFocusState((parsed as { focus?: unknown }).focus),
     };
   } catch {
     return null;

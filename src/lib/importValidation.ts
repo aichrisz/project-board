@@ -1,5 +1,9 @@
 import type {
+  ActiveFocusSession,
   AppSettings,
+  FocusOutcome,
+  FocusSessionRecord,
+  FocusState,
   LinkItem,
   Project,
   ProjectStatus,
@@ -13,6 +17,15 @@ import {
   PROJECT_STATUSES,
   PROJECT_TYPES,
 } from '../types';
+import {
+  CANONICAL_INSTANT_RE,
+  DEFAULT_FOCUS_STATE,
+  FOCUS_HISTORY_CAP,
+  MAX_FOCUS_NOTE_CHARS,
+  dedupeFocusHistory,
+  expectedElapsedSeconds,
+  isFocusPreset,
+} from './focusSession';
 import { migrateProject } from './storage';
 
 /** Hard cap on import payload size (5 MB of UTF-8 encoded text) to bound parse work. */
@@ -343,6 +356,278 @@ function parseSettings(raw: unknown): AppSettings {
   };
 }
 
+function requireCanonicalInstant(
+  value: unknown,
+  where: string,
+  field: string,
+): string {
+  if (
+    typeof value !== 'string' ||
+    !CANONICAL_INSTANT_RE.test(value) ||
+    !isValidCalendarDateString(value) ||
+    !Number.isFinite(Date.parse(value))
+  ) {
+    fail(`${where}: "${field}" must be a UTC timestamp ending in "Z".`);
+  }
+  return value;
+}
+
+function requireNonBlankId(
+  value: unknown,
+  where: string,
+  field: string,
+): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    fail(`${where}: "${field}" is required.`);
+  }
+  return value;
+}
+
+function parseFocusRecord(
+  raw: unknown,
+  index: number,
+  byProject: Map<string, Set<string>>,
+): FocusSessionRecord {
+  const where = `Focus history ${index + 1}`;
+  if (!isPlainObject(raw)) {
+    fail(`${where}: each entry must be an object.`);
+  }
+
+  const id = requireNonBlankId(raw.id, where, 'id');
+  const projectId = requireNonBlankId(raw.projectId, where, 'projectId');
+  const projectSteps = byProject.get(projectId);
+  if (!projectSteps) {
+    fail(`${where}: "projectId" does not match any imported project.`);
+  }
+
+  let stepId: string | undefined;
+  if (raw.stepId !== undefined) {
+    if (
+      typeof raw.stepId !== 'string' ||
+      !raw.stepId.trim() ||
+      !projectSteps.has(raw.stepId)
+    ) {
+      fail(`${where}: "stepId" does not belong to that project.`);
+    }
+    stepId = raw.stepId;
+  }
+
+  const plannedMinutes = raw.plannedMinutes;
+  if (!isFocusPreset(plannedMinutes)) {
+    fail(
+      `${where}: "plannedMinutes" must be 15, 25, 45, or 60.`,
+    );
+  }
+
+  if (
+    raw.outcome !== 'completed' &&
+    raw.outcome !== 'stopped' &&
+    raw.outcome !== 'expired'
+  ) {
+    fail(`${where}: "outcome" is not a supported value.`);
+  }
+  const outcome = raw.outcome as FocusOutcome;
+  const startedAt = requireCanonicalInstant(raw.startedAt, where, 'startedAt');
+  const endedAt = requireCanonicalInstant(raw.endedAt, where, 'endedAt');
+  const startedAtMs = Date.parse(startedAt);
+  const endedAtMs = Date.parse(endedAt);
+  if (endedAtMs < startedAtMs) {
+    fail(`${where}: "endedAt" must not be before "startedAt".`);
+  }
+
+  const elapsedSeconds = raw.elapsedSeconds;
+  if (
+    typeof elapsedSeconds !== 'number' ||
+    !Number.isFinite(elapsedSeconds) ||
+    !Number.isInteger(elapsedSeconds) ||
+    elapsedSeconds < 0 ||
+    elapsedSeconds > plannedMinutes * 60
+  ) {
+    fail(`${where}: "elapsedSeconds" is out of range.`);
+  }
+  const derived = expectedElapsedSeconds({
+    startedAtMs,
+    endedAtMs,
+    plannedMinutes,
+  });
+  if (elapsedSeconds !== derived) {
+    fail(
+      `${where}: "elapsedSeconds" does not match "startedAt" and "endedAt".`,
+    );
+  }
+  if (outcome === 'expired') {
+    if (elapsedSeconds !== plannedMinutes * 60) {
+      fail(`${where}: an expired session must last its full planned duration.`);
+    }
+    if (endedAtMs !== startedAtMs + plannedMinutes * 60_000) {
+      fail(`${where}: an expired session must end exactly at its planned end time.`);
+    }
+  }
+
+  let note: string | undefined;
+  if (raw.note !== undefined) {
+    if (
+      typeof raw.note !== 'string' ||
+      raw.note.trim().length > MAX_FOCUS_NOTE_CHARS
+    ) {
+      fail(
+        `${where}: "note" is too long (limit ${MAX_FOCUS_NOTE_CHARS} characters).`,
+      );
+    }
+    const normalizedNote = raw.note.trim();
+    if (normalizedNote) note = normalizedNote;
+  }
+
+  const record: FocusSessionRecord = {
+    id,
+    projectId,
+    startedAt,
+    endedAt,
+    plannedMinutes,
+    elapsedSeconds,
+    outcome,
+  };
+  if (stepId !== undefined) record.stepId = stepId;
+  if (note !== undefined) record.note = note;
+  return record;
+}
+
+function parseActiveFocus(
+  raw: unknown,
+  byProject: Map<string, Set<string>>,
+  doneSteps: Map<string, Set<string>>,
+): ActiveFocusSession | null {
+  if (raw === undefined || raw === null) return null;
+  if (!isPlainObject(raw)) {
+    fail('Focus: active session must be an object.');
+  }
+
+  const id = requireNonBlankId(raw.id, 'Focus: active session', 'id');
+  const projectId = requireNonBlankId(
+    raw.projectId,
+    'Focus: active session',
+    'projectId',
+  );
+  const projectSteps = byProject.get(projectId);
+  if (!projectSteps) {
+    fail('Focus: active session references a missing project.');
+  }
+
+  let stepId: string | undefined;
+  if (raw.stepId !== undefined) {
+    if (
+      typeof raw.stepId !== 'string' ||
+      !raw.stepId.trim() ||
+      !projectSteps.has(raw.stepId)
+    ) {
+      fail('Focus: active session step does not belong to that project.');
+    }
+    if (doneSteps.get(projectId)?.has(raw.stepId)) {
+      fail('Focus: active session references a completed step.');
+    }
+    stepId = raw.stepId;
+  }
+
+  const plannedMinutes = raw.plannedMinutes;
+  if (!isFocusPreset(plannedMinutes)) {
+    fail(
+      'Focus: active session "plannedMinutes" must be 15, 25, 45, or 60.',
+    );
+  }
+  const startedAt = requireCanonicalInstant(
+    raw.startedAt,
+    'Focus: active session',
+    'startedAt',
+  );
+  const endsAt = requireCanonicalInstant(
+    raw.endsAt,
+    'Focus: active session',
+    'endsAt',
+  );
+  const startedAtMs = Date.parse(startedAt);
+  const endsAtMs = Date.parse(endsAt);
+  if (endsAtMs <= startedAtMs) {
+    fail('Focus: active session "endsAt" must be after "startedAt".');
+  }
+
+  let stoppedAt: string | undefined;
+  if (raw.stoppedAt !== undefined) {
+    stoppedAt = requireCanonicalInstant(
+      raw.stoppedAt,
+      'Focus: active session',
+      'stoppedAt',
+    );
+    const stoppedAtMs = Date.parse(stoppedAt);
+    if (stoppedAtMs < startedAtMs || stoppedAtMs > endsAtMs) {
+      fail(
+        'Focus: active session "stoppedAt" is outside the session window.',
+      );
+    }
+  }
+
+  const active: ActiveFocusSession = {
+    id,
+    projectId,
+    startedAt,
+    endsAt,
+    plannedMinutes,
+  };
+  if (stepId !== undefined) active.stepId = stepId;
+  if (stoppedAt !== undefined) active.stoppedAt = stoppedAt;
+  return active;
+}
+
+function parseFocusState(raw: unknown, projects: Project[]): FocusState {
+  if (raw === undefined || raw === null) return DEFAULT_FOCUS_STATE;
+  if (!isPlainObject(raw)) {
+    fail('Focus: "focus" must be an object.');
+  }
+
+  if (!Array.isArray(raw.history)) {
+    fail('Focus: "history" must be a list.');
+  }
+
+  const byProject = new Map<string, Set<string>>();
+  const doneSteps = new Map<string, Set<string>>();
+  for (const project of projects) {
+    byProject.set(project.id, new Set(project.steps.map((step) => step.id)));
+    doneSteps.set(
+      project.id,
+      new Set(project.steps.filter((step) => step.done).map((step) => step.id)),
+    );
+  }
+
+  const parsedHistory = raw.history.map((record, index) =>
+    parseFocusRecord(record, index, byProject),
+  );
+  const history = dedupeFocusHistory(parsedHistory);
+  if (history.length > FOCUS_HISTORY_CAP) {
+    fail(`Focus: too many history entries (limit ${FOCUS_HISTORY_CAP}).`);
+  }
+
+  const seenIds = new Set<string>();
+  for (let index = 0; index < history.length; index += 1) {
+    const record = history[index]!;
+    if (seenIds.has(record.id)) {
+      fail('Focus: history must not contain duplicate ids.');
+    }
+    seenIds.add(record.id);
+    const previous = history[index - 1];
+    if (
+      previous &&
+      (Date.parse(previous.endedAt) < Date.parse(record.endedAt) ||
+        (previous.endedAt === record.endedAt && previous.id > record.id))
+    ) {
+      fail('Focus: history must be newest first.');
+    }
+  }
+
+  return {
+    active: parseActiveFocus(raw.active, byProject, doneSteps),
+    history,
+  };
+}
+
 /**
  * Validate untrusted import text into a StorageBlob.
  * Throws ImportValidationError with a user-safe message on any violation.
@@ -392,9 +677,13 @@ export function validateImportBlob(text: string): StorageBlob {
     return project;
   });
 
+  const settings = parseSettings(parsed.settings);
+  const focus = parseFocusState(parsed.focus, projects);
+
   return {
     version: 1,
     projects,
-    settings: parseSettings(parsed.settings),
+    settings,
+    focus,
   };
 }

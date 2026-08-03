@@ -5,6 +5,8 @@ A **local-first** personal project inventory dashboard. Track status, progress, 
 - **Product name:** Project Board  
 - **Stack:** Vite + React + TypeScript  
 - **Version:** 0.10.0
+- **Focus Session documentation:** v0.11; runtime version chrome remains v0.10.0
+  while version chrome work is deferred because of existing lockfile metadata drift
 - **Storage:** browser `localStorage` key `project-board-v1`  
 - **UI language:** English  
 
@@ -39,6 +41,57 @@ non-focusable, session-only, and never persisted.
 - **Regression tests** — `npm test` runs a dependency-free `node:test` suite over the import boundary and the router advisory guard
 - **Router advisory** — `react-router` 8.3.0; `npm audit` reports 0 vulnerabilities. See `docs/DEPENDENCY_NOTES.md` for the evidence trail
 - **Version chrome** — footer shows **v0.8.1**
+
+## Focus Session (v0.11 documentation)
+
+Focus Session is a single global, local-first timer available from Dashboard and
+Project Detail. Choose 15, 25, 45, or 60 minutes (25 by default), with an
+optional link to one unfinished step. Only one active session exists across the
+app.
+
+- **Recovery from absolute time** — `startedAt` and `endsAt` are persisted UTC
+  instants. Reload, navigation, tab close, browser restart, sleep, and expiry
+  recover from those boundaries; the displayed countdown is recalculated and no
+  per-second timer tick is written to storage.
+- **Stop and resolve** — Stop persists `active.stoppedAt` immediately and leaves
+  the session ready to resolve. It is clamped canonically as
+  `min(max(now, startedAt), endsAt)`, and later finalization uses it for `endedAt`
+  and `elapsedSeconds`. Expired or stopped sessions are resolved explicitly:
+  mark an unfinished linked step done, keep working, save an optional note, or
+  finish without a note. Nothing is auto-completed on expiry or recovery.
+- **Linked-step cleanup** — Completing or removing the linked step through the
+  rest of the app removes only `active.stepId`; the active session keeps running.
+  The resolver offers Mark step done only when the link still points to an
+  unfinished step.
+- **History and validation** — History is newest-first and capped at 250. Imports
+  strictly validate project/step references, allowed presets/outcomes, canonical
+  ISO UTC `Z` timestamps with valid calendar dates, derived `elapsedSeconds`, and
+  exact full-duration expired records. Duplicate history ids are deduped
+  deterministically before the cap by `endedAt` descending, then `id` ascending.
+  A completed-step active reference can be recovered by removing `focus.active`
+  and re-importing; a mismatched derived elapsed value can be corrected or
+  recovered from an untruncated backup.
+- **Backup and cleanup** — Export includes the top-level `focus` object; legacy
+  backups may omit that field. When present, `focus` contains required `active`
+  (null or an active session) and `history` array, including `active.stoppedAt`.
+  Replace import restores it; merge preserves the local active session, ignores
+  incoming active state, and unions history by id with local records winning
+  collisions. Project deletion clears its active session and history, reset
+  clears focus, and seed loading never creates focus records (seed replacement
+  prunes against the resulting projects).
+- **Accessible surfaces** — The drawer uses the shared modal focus lifecycle:
+  focus enters on open, Tab and Shift+Tab stay inside, Escape closes without
+  stopping the session, and focus returns to the opener. Dashboard has a Current
+  focus band, Project Detail has a neutral weekly summary, Activity shows focus
+  events, and Review shows focus minutes without scores or streaks.
+- **Scope** — No new route, dependency, storage key, keyboard shortcut, telemetry,
+  analytics, notification, or network behavior. Focus is optional in the existing
+  `version: 1` `project-board-v1` storage/export shape.
+
+The visible footer remains **v0.10.0**. This documentation uses v0.11 while
+version chrome is deferred because the existing lockfile root metadata already
+drifts from the package version; package and version source files remain at their
+current values.
 
 ## Features (v0.8 “Steady”)
 
@@ -191,12 +244,42 @@ Data shape:
     "idleDays": 14,
     "theme": "system",
     "lastExportAt": null
+  },
+  "focus": {
+    "active": {
+      "id": "focus-example",
+      "projectId": "project-example",
+      "stepId": "step-example",
+      "startedAt": "2026-08-03T09:00:00.000Z",
+      "endsAt": "2026-08-03T09:25:00.000Z",
+      "stoppedAt": "2026-08-03T09:05:00.000Z",
+      "plannedMinutes": 25
+    },
+    "history": [
+      {
+        "id": "focus-history-example",
+        "projectId": "project-example",
+        "stepId": "step-example",
+        "startedAt": "2026-08-03T08:00:00.000Z",
+        "endedAt": "2026-08-03T08:05:00.000Z",
+        "plannedMinutes": 25,
+        "elapsedSeconds": 300,
+        "outcome": "stopped",
+        "note": "Example reflection"
+      }
+    ]
   }
 }
 ```
 
 Activity events use a separate key: `project-board-activity-v1` (capped at 100).  
 Missing `starred` on load migrates to `false`. Missing `lastExportAt` migrates to `null`.
+The top-level `focus` field may be omitted in legacy v1 backups; when present, it
+contains required `active` (null or an active session) and `history` array. An
+absent field loads as `{ "active": null, "history": [] }`. `active.stoppedAt`,
+`stepId`, and history `stepId` / `note` are optional. Focus timestamps are
+canonical UTC `Z` instants; millisecond precision may be omitted in a valid
+backup.
 
 ## Seed projects (realistic inventory)
 
