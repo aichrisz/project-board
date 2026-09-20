@@ -4,7 +4,7 @@
 **Audience:** Any AI or engineer implementing, reviewing, or extending the app  
 **Product name:** Project Board  
 **Current documented version:** 0.11.0 (Focus Session)\
-**Current shipped capability:** all features through **v0.11.0**; visible runtime version chrome remains **v0.10.0** while version chrome work is deferred because of existing lockfile metadata drift\
+**Current shipped capability:** all features through **v0.11.0**; visible runtime version chrome and package metadata are synchronized at **v0.11.0**\
 **Last updated:** 2026-08-03
 
 This document is **self-contained**. It describes *what the product is* and *what features exist*. It does **not** depend on a specific host, owner name, or agent toolchain.
@@ -447,7 +447,7 @@ An implementation is “feature-complete for 0.11” if:
 - [ ] Focus chip + URL work  
 - [ ] Duplicate creates idea copy with unchecked steps  
 - [ ] Link chips safe for http(s) / path-like  
-- [ ] Footer/chrome remains **v0.10.0**; v0.11 is documented while version chrome is deferred because of existing lockfile metadata drift
+- [x] Footer/chrome and package metadata are synchronized at **v0.11.0**
 - [ ] Import rejects malformed, unsafe, or oversized files with a plain-language message
 - [ ] `/review` weekly review works  
 - [ ] Board keyboard status/focus works, and an owned key at a boundary neither scrolls the page nor opens the card
@@ -500,4 +500,4 @@ Possible later themes (only if product owner approves a plan):
 
 ---
 
-*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.11.0 (documented shipped capability through v0.11.0; runtime version chrome remains v0.10.0).*
+*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.11.0.*

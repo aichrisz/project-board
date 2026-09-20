@@ -4,9 +4,7 @@ A **local-first** personal project inventory dashboard. Track status, progress, 
 
 - **Product name:** Project Board  
 - **Stack:** Vite + React + TypeScript  
-- **Version:** 0.10.0
-- **Focus Session documentation:** v0.11; runtime version chrome remains v0.10.0
-  while version chrome work is deferred because of existing lockfile metadata drift
+- **Version:** 0.11.0
 - **Storage:** browser `localStorage` key `project-board-v1`  
 - **UI language:** English  
 
@@ -88,10 +86,7 @@ app.
   analytics, notification, or network behavior. Focus is optional in the existing
   `version: 1` `project-board-v1` storage/export shape.
 
-The visible footer remains **v0.10.0**. This documentation uses v0.11 while
-version chrome is deferred because the existing lockfile root metadata already
-drifts from the package version; package and version source files remain at their
-current values.
+The visible footer, package metadata, and lockfile are synchronized at **v0.11.0**.
 
 ## Features (v0.8 “Steady”)
 

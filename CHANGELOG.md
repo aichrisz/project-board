@@ -4,10 +4,9 @@ All notable changes to Project Board. Local-first single-user app; dates are UTC
 
 ## 0.11.0 — Focus Session (2026-08-03)
 
-This entry documents the shipped Focus Session as **v0.11**. Runtime/package
-version chrome remains **v0.10.0**: updating it is deferred because the existing
-`package-lock.json` root metadata already drifts from `package.json`. `package.json`,
-`package-lock.json`, and `src/version.ts` are intentionally unchanged.
+This entry documents the shipped Focus Session as **v0.11**. The visible version,
+`package.json`, `package-lock.json`, and `src/version.ts` are synchronized at
+**v0.11.0**.
 
 ### Added
 
