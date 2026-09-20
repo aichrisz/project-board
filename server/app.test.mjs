@@ -28,11 +28,39 @@ async function withApp(callback) {
   }
 }
 
+function project(overrides = {}) {
+  return {
+    id: 'p1',
+    title: 'Alpha',
+    slug: 'alpha',
+    type: 'tool',
+    status: 'in_progress',
+    summary: '',
+    progress_pct: 0,
+    steps: [],
+    notes_md: '',
+    links: [],
+    tags: [],
+    deadline: null,
+    stack: [],
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-02T00:00:00.000Z',
+    started_at: null,
+    starred: false,
+    ...overrides,
+  };
+}
+
 function workspace(overrides = {}) {
   return {
     version: 1,
     projects: [],
-    settings: {},
+    settings: {
+      showCompleted: false,
+      idleDays: 14,
+      theme: 'system',
+      lastExportAt: null,
+    },
     focus: { active: null, history: [] },
     activity: [],
     ...overrides,
@@ -57,6 +85,11 @@ describe('authenticated workspace server', () => {
         headers: identity('not-an-email'),
       });
       assert.equal(malformed.status, 401);
+
+      const repeatedDomainDot = await request(base, '/api/workspace', {
+        headers: identity('a@b..c'),
+      });
+      assert.equal(repeatedDomainDot.status, 401);
     });
   });
 
@@ -72,9 +105,15 @@ describe('authenticated workspace server', () => {
   it('round-trips a workspace document for its normalized owner', async () => {
     await withApp(async (base) => {
       const document = workspace({
-        projects: [{ id: 'p1', title: 'Alpha' }],
-        settings: { theme: 'dark' },
-        activity: [{ id: 'a1', message: 'created' }],
+        projects: [project()],
+        settings: { ...workspace().settings, theme: 'dark' },
+        activity: [{
+          id: 'a1',
+          at: '2026-01-03T00:00:00.000Z',
+          type: 'project_created',
+          projectId: 'p1',
+          message: 'created',
+        }],
       });
       const saved = await request(base, '/api/workspace', {
         method: 'PUT',
@@ -93,8 +132,8 @@ describe('authenticated workspace server', () => {
 
   it('isolates workspaces by authenticated email', async () => {
     await withApp(async (base) => {
-      const first = workspace({ projects: [{ id: 'first' }] });
-      const second = workspace({ projects: [{ id: 'second' }] });
+      const first = workspace({ projects: [project({ id: 'first' })] });
+      const second = workspace({ projects: [project({ id: 'second' })] });
       for (const [email, document] of [['first@example.com', first], ['second@example.com', second]]) {
         const response = await request(base, '/api/workspace', {
           method: 'PUT',
@@ -108,6 +147,30 @@ describe('authenticated workspace server', () => {
       const secondRead = await request(base, '/api/workspace', { headers: identity('second@example.com') });
       assert.deepEqual((await firstRead.json()).projects, first.projects);
       assert.deepEqual((await secondRead.json()).projects, second.projects);
+    });
+  });
+
+  it('rejects malformed nested project, settings, focus, and activity data before persistence', async () => {
+    await withApp(async (base) => {
+      const cases = [
+        workspace({ projects: [{}] }),
+        workspace({ settings: {} }),
+        workspace({ focus: { active: null, history: [{}] } }),
+        workspace({ activity: [{}] }),
+      ];
+      for (const document of cases) {
+        const response = await request(base, '/api/workspace', {
+          method: 'PUT',
+          headers: { ...identity('owner@example.com'), 'content-type': 'application/json' },
+          body: JSON.stringify(document),
+        });
+        assert.equal(response.status, 400);
+      }
+
+      const loaded = await request(base, '/api/workspace', {
+        headers: identity('owner@example.com'),
+      });
+      assert.equal(loaded.status, 204);
     });
   });
 

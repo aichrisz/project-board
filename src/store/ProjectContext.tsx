@@ -34,7 +34,7 @@ import { createId, slugify } from '../lib/id';
 import { withAutoProgress } from '../lib/progress';
 import { loadStorage, migrateProject, saveStorage } from '../lib/storage';
 import {
-  loadRemoteWorkspace,
+  hydrateRemoteWorkspace,
   queueRemoteWorkspaceSave,
   type RemoteWorkspace,
 } from '../lib/remoteWorkspace';
@@ -305,36 +305,34 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setActivity(snapshot.activity);
     };
 
-    // First visit: empty board so onboarding can run (no auto-seed).
-    applySnapshot(localWorkspace);
-    setReady(true);
-
     let mounted = true;
-    void loadRemoteWorkspace()
-      .then((remote) => {
+    void hydrateRemoteWorkspace(localWorkspace)
+      .then((hydrated) => {
         if (!mounted) return;
-        if (remote) {
-          const remoteProjects = remote.projects.map(normalizeProject);
-          const remoteSnapshot = makeRemoteWorkspace(
-            remoteProjects,
-            { ...DEFAULT_SETTINGS, ...remote.settings },
-            hydrateFocusState({ raw: remote.focus, hydratedProjects: remoteProjects }),
-            normalizeRemoteActivity(remote.activity),
-          );
-          applySnapshot(remoteSnapshot);
-          remoteBaselineRef.current = workspaceKey(remoteSnapshot);
-        } else {
-          remoteBaselineRef.current = workspaceKey(localWorkspace);
-          queueRemoteWorkspaceSave(localWorkspace).catch(() => undefined);
+        const snapshot =
+          hydrated.status === 'ready' && !hydrated.shouldSave
+            ? (() => {
+                const remoteProjects = hydrated.workspace.projects.map(normalizeProject);
+                return makeRemoteWorkspace(
+                  remoteProjects,
+                  { ...DEFAULT_SETTINGS, ...hydrated.workspace.settings },
+                  hydrateFocusState({
+                    raw: hydrated.workspace.focus,
+                    hydratedProjects: remoteProjects,
+                  }),
+                  normalizeRemoteActivity(hydrated.workspace.activity),
+                );
+              })()
+            : hydrated.workspace;
+        applySnapshot(snapshot);
+        remoteBaselineRef.current = workspaceKey(snapshot);
+        if (hydrated.shouldSave) {
+          queueRemoteWorkspaceSave(snapshot).catch(() => undefined);
         }
-        remoteSyncRef.current = 'ready';
+        saveActivity(snapshot.activity);
+        remoteSyncRef.current = hydrated.status;
         setRemoteReady(true);
-      })
-      .catch(() => {
-        if (!mounted) return;
-        remoteSyncRef.current = 'failed';
-        remoteBaselineRef.current = workspaceKey(localWorkspace);
-        setRemoteReady(true);
+        setReady(true);
       });
 
     return () => {

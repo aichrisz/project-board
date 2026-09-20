@@ -8,17 +8,61 @@ import { pathToFileURL } from 'node:url';
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
 const MAX_PROJECTS = 5000;
 const MAX_ACTIVITY = 100;
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_ID_CHARS = 200;
+const MAX_TITLE_CHARS = 400;
+const MAX_SHORT_TEXT_CHARS = 2000;
+const MAX_NOTES_CHARS = 200_000;
+const MAX_URL_CHARS = 4000;
+const MAX_ITEMS_PER_PROJECT = 500;
+const MAX_TAGS_PER_PROJECT = 50;
+const MAX_FOCUS_HISTORY = 250;
+const MAX_FOCUS_NOTE_CHARS = 200;
+const PROJECT_TYPES = new Set(['game', 'web', 'tool', 'learning', 'infra', 'other']);
+const PROJECT_STATUSES = new Set(['idea', 'planned', 'in_progress', 'paused', 'done', 'archived']);
+const ACTIVITY_TYPES = new Set([
+  'project_created',
+  'status_changed',
+  'step_toggled',
+  'focus_session',
+  'project_deleted',
+  'import',
+  'seed',
+  'reset',
+]);
+const THEMES = new Set(['dark', 'light', 'system']);
+const FOCUS_PRESETS = new Set([15, 25, 45, 60]);
+const FOCUS_OUTCOMES = new Set(['completed', 'stopped', 'expired']);
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+$/;
+const ISO_DATE_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
+const CANONICAL_INSTANT_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isValidEmail(value) {
+  if (!EMAIL_PATTERN.test(value)) return false;
+  const [local, domain] = value.split('@');
+  return Boolean(
+    local &&
+      domain &&
+      !local.startsWith('.') &&
+      !local.endsWith('.') &&
+      !local.includes('..') &&
+      !domain.startsWith('.') &&
+      !domain.endsWith('.') &&
+      !domain.includes('..') &&
+      domain.split('.').every((label) => label.length > 0),
+  );
 }
 
 function normalizeOwner(request) {
   const value = request.headers['cf-access-authenticated-user-email'];
   if (typeof value !== 'string') return null;
   const owner = value.trim().toLowerCase();
-  return EMAIL_PATTERN.test(owner) ? owner : null;
+  return isValidEmail(owner) ? owner : null;
 }
 
 function sendJson(response, status, body) {
@@ -34,13 +78,174 @@ function sendEmpty(response, status) {
   response.end();
 }
 
+function isValidString(value, max, allowBlank = false) {
+  return (
+    typeof value === 'string' &&
+    value.length <= max &&
+    (allowBlank || value.trim().length > 0)
+  );
+}
+
+function isValidCalendarDate(value) {
+  if (typeof value !== 'string') return false;
+  const match = ISO_DATE_PATTERN.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1] && Number.isFinite(Date.parse(value));
+}
+
+function isValidCanonicalInstant(value) {
+  return (
+    typeof value === 'string' &&
+    CANONICAL_INSTANT_PATTERN.test(value) &&
+    isValidCalendarDate(value)
+  );
+}
+
+function isValidStringArray(value, maxEntries) {
+  return (
+    Array.isArray(value) &&
+    value.length <= maxEntries &&
+    value.every((entry) => isValidString(entry, MAX_SHORT_TEXT_CHARS, true))
+  );
+}
+
+function isValidSteps(value) {
+  if (!Array.isArray(value) || value.length > MAX_ITEMS_PER_PROJECT) return false;
+  const ids = new Set();
+  return value.every((step) => {
+    if (!isRecord(step) || !isValidString(step.id, MAX_ID_CHARS)) return false;
+    if (ids.has(step.id) || !isValidString(step.title, MAX_TITLE_CHARS, true)) return false;
+    if (typeof step.done !== 'boolean' || typeof step.order !== 'number' || !Number.isFinite(step.order)) return false;
+    ids.add(step.id);
+    return true;
+  });
+}
+
+function isValidLinks(value) {
+  if (!Array.isArray(value) || value.length > MAX_ITEMS_PER_PROJECT) return false;
+  const ids = new Set();
+  return value.every((link) => {
+    if (!isRecord(link) || !isValidString(link.id, MAX_ID_CHARS)) return false;
+    if (ids.has(link.id)) return false;
+    if (!isValidString(link.label, MAX_TITLE_CHARS, true)) return false;
+    if (!isValidString(link.url, MAX_URL_CHARS)) return false;
+    ids.add(link.id);
+    return true;
+  });
+}
+
+function isValidProject(project) {
+  return (
+    isRecord(project) &&
+    isValidString(project.id, MAX_ID_CHARS) &&
+    isValidString(project.title, MAX_TITLE_CHARS) &&
+    isValidString(project.slug, MAX_TITLE_CHARS, true) &&
+    PROJECT_TYPES.has(project.type) &&
+    PROJECT_STATUSES.has(project.status) &&
+    isValidString(project.summary, MAX_SHORT_TEXT_CHARS, true) &&
+    typeof project.progress_pct === 'number' &&
+    Number.isFinite(project.progress_pct) &&
+    project.progress_pct >= 0 &&
+    project.progress_pct <= 100 &&
+    isValidSteps(project.steps) &&
+    isValidString(project.notes_md, MAX_NOTES_CHARS, true) &&
+    isValidLinks(project.links) &&
+    isValidStringArray(project.tags, MAX_TAGS_PER_PROJECT) &&
+    isValidStringArray(project.stack, MAX_TAGS_PER_PROJECT) &&
+    (project.deadline === null || isValidCalendarDate(project.deadline)) &&
+    isValidCalendarDate(project.created_at) &&
+    isValidCalendarDate(project.updated_at) &&
+    (project.started_at === null || project.started_at === undefined || isValidCalendarDate(project.started_at)) &&
+    (project.starred === undefined || typeof project.starred === 'boolean')
+  );
+}
+
+function isValidSettings(settings) {
+  return (
+    isRecord(settings) &&
+    typeof settings.showCompleted === 'boolean' &&
+    Number.isInteger(settings.idleDays) &&
+    settings.idleDays >= 1 &&
+    settings.idleDays <= 365 &&
+    THEMES.has(settings.theme) &&
+    (settings.lastExportAt === null || isValidCalendarDate(settings.lastExportAt))
+  );
+}
+
+function projectReferences(projects) {
+  const byId = new Map();
+  for (const project of projects) {
+    const steps = new Map(project.steps.map((step) => [step.id, step.done]));
+    if (byId.has(project.id)) return null;
+    byId.set(project.id, steps);
+  }
+  return byId;
+}
+
+function isValidFocusRecord(record, projects) {
+  if (!isRecord(record)) return false;
+  const steps = projects.get(record.projectId);
+  if (!isValidString(record.id, MAX_ID_CHARS) || !steps || !isValidString(record.projectId, MAX_ID_CHARS)) return false;
+  if (record.stepId !== undefined && (!isValidString(record.stepId, MAX_ID_CHARS) || !steps.has(record.stepId))) return false;
+  if (!FOCUS_PRESETS.has(record.plannedMinutes) || !FOCUS_OUTCOMES.has(record.outcome)) return false;
+  if (!isValidCanonicalInstant(record.startedAt) || !isValidCanonicalInstant(record.endedAt)) return false;
+  const startedAt = Date.parse(record.startedAt);
+  const endedAt = Date.parse(record.endedAt);
+  const elapsed = (endedAt - startedAt) / 1000;
+  if (endedAt < startedAt || !Number.isInteger(record.elapsedSeconds) || record.elapsedSeconds < 0 || record.elapsedSeconds > record.plannedMinutes * 60) return false;
+  if (record.elapsedSeconds !== Math.floor(Math.min(Math.max(elapsed, 0), record.plannedMinutes * 60))) return false;
+  if (record.outcome === 'expired' && (record.elapsedSeconds !== record.plannedMinutes * 60 || endedAt !== startedAt + record.plannedMinutes * 60_000)) return false;
+  return record.note === undefined || (typeof record.note === 'string' && record.note.trim().length <= MAX_FOCUS_NOTE_CHARS);
+}
+
+function isValidActiveFocus(active, projects) {
+  if (active === null) return true;
+  if (!isRecord(active)) return false;
+  const steps = projects.get(active.projectId);
+  if (!isValidString(active.id, MAX_ID_CHARS) || !steps || !isValidString(active.projectId, MAX_ID_CHARS)) return false;
+  if (active.stepId !== undefined && (!isValidString(active.stepId, MAX_ID_CHARS) || steps.get(active.stepId) !== false)) return false;
+  if (!FOCUS_PRESETS.has(active.plannedMinutes) || !isValidCanonicalInstant(active.startedAt) || !isValidCanonicalInstant(active.endsAt)) return false;
+  const startedAt = Date.parse(active.startedAt);
+  const endsAt = Date.parse(active.endsAt);
+  if (endsAt <= startedAt) return false;
+  if (active.stoppedAt !== undefined) {
+    if (!isValidCanonicalInstant(active.stoppedAt)) return false;
+    const stoppedAt = Date.parse(active.stoppedAt);
+    if (stoppedAt < startedAt || stoppedAt > endsAt) return false;
+  }
+  return true;
+}
+
+function isValidFocus(focus, projects) {
+  if (focus === undefined || focus === null) return true;
+  if (!isRecord(focus) || !Array.isArray(focus.history) || focus.history.length > MAX_FOCUS_HISTORY) return false;
+  return isValidActiveFocus(focus.active, projects) && focus.history.every((record) => isValidFocusRecord(record, projects));
+}
+
+function isValidActivityEvent(event) {
+  return (
+    isRecord(event) &&
+    isValidString(event.id, MAX_ID_CHARS) &&
+    isValidCalendarDate(event.at) &&
+    ACTIVITY_TYPES.has(event.type) &&
+    isValidString(event.message, MAX_SHORT_TEXT_CHARS, true) &&
+    (event.projectId === undefined || isValidString(event.projectId, MAX_ID_CHARS))
+  );
+}
+
 function validateWorkspace(document) {
   if (!isRecord(document) || document.version !== 1) return false;
   if (!Array.isArray(document.projects) || document.projects.length > MAX_PROJECTS) return false;
-  if (!isRecord(document.settings)) return false;
+  if (!isValidSettings(document.settings)) return false;
   if (!Array.isArray(document.activity) || document.activity.length > MAX_ACTIVITY) return false;
-  if (document.focus !== undefined && !isRecord(document.focus)) return false;
-  return document.projects.every(isRecord) && document.activity.every(isRecord);
+  if (!document.projects.every(isValidProject) || !document.activity.every(isValidActivityEvent)) return false;
+  const projects = projectReferences(document.projects);
+  return projects !== null && isValidFocus(document.focus, projects);
 }
 
 async function readBody(request) {

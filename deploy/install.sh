@@ -9,6 +9,7 @@ fi
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 APP_DIR=/opt/project-board
 DATA_DIR=/var/lib/project-board
+DATABASE_PATH="$DATA_DIR/project-board.db"
 BACKUP_DIR=/var/backups/project-board
 SERVICE_USER=project-board
 UNIT_DIR=$(mktemp -d)
@@ -26,6 +27,14 @@ npm run build
 
 if ! id "$SERVICE_USER" >/dev/null 2>&1; then
   useradd --system --home-dir "$APP_DIR" --create-home --shell /usr/sbin/nologin "$SERVICE_USER"
+fi
+
+if [[ -e "$DATABASE_PATH" ]]; then
+  DATABASE_PATH="$DATABASE_PATH" BACKUP_DIR="$BACKUP_DIR" "$NODE_BIN" "$ROOT_DIR/deploy/backup.mjs"
+fi
+
+if systemctl is-active --quiet project-board.service; then
+  systemctl stop project-board.service
 fi
 
 install -d -o root -g root -m 0755 "$APP_DIR"

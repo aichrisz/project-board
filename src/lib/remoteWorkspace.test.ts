@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import { DEFAULT_SETTINGS } from '../types';
 
 import {
+  hydrateRemoteWorkspace,
   loadRemoteWorkspace,
   queueRemoteWorkspaceSave,
   type RemoteWorkspace,
@@ -25,6 +26,36 @@ function response(status: number, body?: unknown): Response {
 }
 
 describe('remote workspace API bridge', () => {
+  it('does not resolve a mutable snapshot before remote hydration completes', async () => {
+    let release!: (value: RemoteWorkspace) => void;
+    const pending = new Promise<RemoteWorkspace>((resolve) => {
+      release = resolve;
+    });
+    let settled = false;
+    const hydration = hydrateRemoteWorkspace(workspace, () => pending);
+    void hydration.then(() => {
+      settled = true;
+    });
+
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(settled, false);
+
+    const remote = { ...workspace, projects: [{ ...workspace.projects[0], id: 'remote' }] };
+    release(remote);
+    assert.deepEqual((await hydration).workspace, remote);
+  });
+
+  it('keeps the local workspace when remote hydration fails', async () => {
+    const result = await hydrateRemoteWorkspace(workspace, async () => {
+      throw new Error('offline');
+    });
+    assert.deepEqual(result, {
+      workspace,
+      status: 'failed',
+      shouldSave: false,
+    });
+  });
+
   it('maps an empty response to null and parses a workspace response', async () => {
     const empty = await loadRemoteWorkspace(async () => response(204));
     assert.equal(empty, null);

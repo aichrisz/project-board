@@ -7,6 +7,22 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 bash -n "$ROOT_DIR/deploy/check.sh" "$ROOT_DIR/deploy/install.sh"
 
+CHECK_INSTALL="$ROOT_DIR/deploy/install.sh" node --input-type=module -e '
+  import { readFileSync } from "node:fs";
+  const script = readFileSync(process.env.CHECK_INSTALL, "utf8");
+  const quote = String.fromCharCode(34);
+  const backup = script.indexOf(`${quote}$ROOT_DIR/deploy/backup.mjs${quote}`);
+  const replace = script.indexOf(`find ${quote}$APP_DIR${quote}`);
+  if (
+    !script.includes(`if [[ -e ${quote}$DATABASE_PATH${quote} ]]`) ||
+    backup < 0 ||
+    replace < 0 ||
+    backup > replace
+  ) {
+    throw new Error("install.sh must integrity-backup an existing database before replacing the app");
+  }
+'
+
 NODE_BIN=$(command -v node)
 
 rendered_units=()
