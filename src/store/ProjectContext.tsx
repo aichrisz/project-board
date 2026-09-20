@@ -33,6 +33,11 @@ import { isIdle } from '../lib/health';
 import { createId, slugify } from '../lib/id';
 import { withAutoProgress } from '../lib/progress';
 import { loadStorage, migrateProject, saveStorage } from '../lib/storage';
+import {
+  loadRemoteWorkspace,
+  queueRemoteWorkspaceSave,
+  type RemoteWorkspace,
+} from '../lib/remoteWorkspace';
 import { applyTheme } from '../lib/theme';
 import type {
   ActivityEvent,
@@ -124,6 +129,32 @@ function normalizeProject(project: Project): Project {
   return migrateProject(withAutoProgress(project));
 }
 
+function normalizeRemoteActivity(value: unknown): ActivityEvent[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (event): event is ActivityEvent =>
+      !!event &&
+      typeof event === 'object' &&
+      typeof (event as ActivityEvent).id === 'string' &&
+      typeof (event as ActivityEvent).at === 'string' &&
+      typeof (event as ActivityEvent).type === 'string' &&
+      typeof (event as ActivityEvent).message === 'string',
+  );
+}
+
+function makeRemoteWorkspace(
+  projects: Project[],
+  settings: AppSettings,
+  focus: FocusState,
+  activity: ActivityEvent[],
+): RemoteWorkspace {
+  return { version: 1, projects, settings, focus, activity };
+}
+
+function workspaceKey(workspace: RemoteWorkspace): string {
+  return JSON.stringify(workspace);
+}
+
 function toggleStepInProjects(
   projects: readonly Project[],
   projectId: string,
@@ -161,6 +192,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [focus, setFocus] = useState<FocusState>(DEFAULT_FOCUS_STATE);
   const [ready, setReady] = useState(false);
+  const [remoteReady, setRemoteReady] = useState(false);
+  const remoteSyncRef = useRef<'loading' | 'ready' | 'failed'>('loading');
+  const remoteBaselineRef = useRef<string | null>(null);
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
   const focusRef = useRef(focus);
@@ -252,20 +286,60 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       hydratedProjects,
     });
     const hydratedActivity = loadActivity();
-    projectsRef.current = hydratedProjects;
-    focusRef.current = hydratedFocus;
-    activityRef.current = hydratedActivity;
-    if (stored) {
-      setProjects(hydratedProjects);
-      setSettings({ ...DEFAULT_SETTINGS, ...stored.settings });
-    } else {
-      // First visit: empty board so onboarding can run (no auto-seed)
-      setProjects(hydratedProjects);
-      setSettings(DEFAULT_SETTINGS);
-    }
-    setFocus(hydratedFocus);
-    setActivity(hydratedActivity);
+    const hydratedSettings = stored
+      ? { ...DEFAULT_SETTINGS, ...stored.settings }
+      : DEFAULT_SETTINGS;
+    const localWorkspace = makeRemoteWorkspace(
+      hydratedProjects,
+      hydratedSettings,
+      hydratedFocus,
+      hydratedActivity,
+    );
+    const applySnapshot = (snapshot: RemoteWorkspace) => {
+      projectsRef.current = snapshot.projects;
+      focusRef.current = snapshot.focus ?? DEFAULT_FOCUS_STATE;
+      activityRef.current = snapshot.activity;
+      setProjects(snapshot.projects);
+      setSettings(snapshot.settings);
+      setFocus(snapshot.focus ?? DEFAULT_FOCUS_STATE);
+      setActivity(snapshot.activity);
+    };
+
+    // First visit: empty board so onboarding can run (no auto-seed).
+    applySnapshot(localWorkspace);
     setReady(true);
+
+    let mounted = true;
+    void loadRemoteWorkspace()
+      .then((remote) => {
+        if (!mounted) return;
+        if (remote) {
+          const remoteProjects = remote.projects.map(normalizeProject);
+          const remoteSnapshot = makeRemoteWorkspace(
+            remoteProjects,
+            { ...DEFAULT_SETTINGS, ...remote.settings },
+            hydrateFocusState({ raw: remote.focus, hydratedProjects: remoteProjects }),
+            normalizeRemoteActivity(remote.activity),
+          );
+          applySnapshot(remoteSnapshot);
+          remoteBaselineRef.current = workspaceKey(remoteSnapshot);
+        } else {
+          remoteBaselineRef.current = workspaceKey(localWorkspace);
+          queueRemoteWorkspaceSave(localWorkspace).catch(() => undefined);
+        }
+        remoteSyncRef.current = 'ready';
+        setRemoteReady(true);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        remoteSyncRef.current = 'failed';
+        remoteBaselineRef.current = workspaceKey(localWorkspace);
+        setRemoteReady(true);
+      });
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -273,6 +347,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const blob: StorageBlob = { version: 1, projects, settings, focus };
     saveStorage(blob);
   }, [projects, settings, focus, ready]);
+
+  useEffect(() => {
+    if (!ready || !remoteReady || remoteSyncRef.current === 'loading') return;
+    const workspace = makeRemoteWorkspace(projects, settings, focus, activity);
+    const key = workspaceKey(workspace);
+    if (key === remoteBaselineRef.current) return;
+    remoteBaselineRef.current = key;
+    queueRemoteWorkspaceSave(workspace).catch(() => undefined);
+  }, [activity, focus, projects, remoteReady, ready, settings]);
 
   useEffect(() => {
     if (!ready) return;
