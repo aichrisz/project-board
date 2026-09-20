@@ -5,7 +5,7 @@ A **local-first** personal project inventory dashboard. Track status, progress, 
 - **Product name:** Project Board  
 - **Stack:** Vite + React + TypeScript  
 - **Version:** 0.11.0
-- **Storage:** browser `localStorage` key `project-board-v1`  
+- **Storage:** authenticated-owner SQLite workspace with browser `localStorage` offline cache
 - **UI language:** English  
 
 ## Design (v0.10 “Quiet Command Center”)
@@ -17,7 +17,7 @@ A **local-first** personal project inventory dashboard. Track status, progress, 
 - **Grouping by purpose** — Dashboard uses a ledger strip and status-spined project cards, Board uses sunken troughs, Review uses report lists, and Activity uses a timeline; these are not uniform SaaS cards
 - **Measured contrast floors** — final tokens target at least 4.5:1 for body text and 3:1 for UI borders. The tightest checked pairings are dark danger-on-hover at 4.72:1, light warning-on-sunken at 4.53:1, and light muted-on-sunken at 4.56:1
 - **Responsive and accessible** — touch targets remain at least 44px, focus rings, reduced motion, forced colors, print styles, both themes, and the existing mobile Board overflow affordance are preserved
-- **No new dependencies** — the redesign is presentation-only; storage keys and schemas, routes, import/export, shortcuts, Board keyboard behavior, dialogs, PWA behavior, and deployment flow remain unchanged
+- **No new dependencies** — the redesign is presentation-only; storage keys and schemas, routes, import/export, shortcuts, Board keyboard behavior, dialogs, and PWA behavior remain unchanged
 - **Version chrome** — footer shows **v0.10.0**
 
 The v0.9 accessibility contracts remain in force: the mobile menu and `?` dialog
@@ -160,11 +160,28 @@ Open the URL printed by Vite (usually `http://localhost:5173`).
 npm run build
 ```
 
-Preview the build:
+## Preview the build:
 
 ```bash
 npm run preview -- --host 127.0.0.1 --port 8780
 ```
+
+## Authenticated VPS deployment
+
+The production server stores one workspace per authenticated owner in SQLite and
+serves the built app from loopback. The browser `localStorage` data remains an
+offline cache and the existing JSON import/export remains available.
+
+```bash
+bash deploy/check.sh
+sudo bash deploy/install.sh
+```
+
+`deploy/install.sh` builds `/opt/project-board`, creates the unprivileged
+`project-board` service account, persists the database under
+`/var/lib/project-board`, and enables the daily backup timer under
+`/var/backups/project-board`. It installs only the local systemd units; Cloudflare
+Tunnel and Access must be configured separately.
 
 ## Tests
 
@@ -295,4 +312,6 @@ Seed notes include local paths under `/root/projects/*` and vault path for ops. 
 
 ## Privacy
 
-Everything stays in your browser. No accounts, no telemetry, no secrets required.
+Workspace data is stored in the authenticated owner's SQLite row on the server,
+with a browser `localStorage` cache for offline startup. No telemetry or account
+secrets are committed; Cloudflare credentials remain an external deployment concern.

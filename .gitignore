@@ -10,6 +10,12 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+
+# local server data
+data/
+*.db
+*.db-shm
+*.db-wal
 *.local
 
 # Editor directories and files

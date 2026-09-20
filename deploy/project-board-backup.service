@@ -1,0 +1,21 @@
+[Unit]
+Description=Project Board SQLite backup
+After=project-board.service
+
+[Service]
+Type=oneshot
+User=project-board
+Group=project-board
+WorkingDirectory=/opt/project-board
+Environment=DATABASE_PATH=/var/lib/project-board/project-board.db
+Environment=BACKUP_DIR=/var/backups/project-board
+ExecStart=@NODE_BIN@ /opt/project-board/deploy/backup.mjs
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/var/lib/project-board
+ReadWritePaths=/var/backups/project-board
+
+[Install]
+WantedBy=multi-user.target

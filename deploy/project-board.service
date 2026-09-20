@@ -1,0 +1,25 @@
+[Unit]
+Description=Project Board authenticated workspace
+After=network.target
+
+[Service]
+Type=simple
+User=project-board
+Group=project-board
+WorkingDirectory=/opt/project-board
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=8780
+Environment=DATABASE_PATH=/var/lib/project-board/project-board.db
+Environment=DIST_DIR=/opt/project-board/dist
+ExecStart=@NODE_BIN@ /opt/project-board/server/app.mjs
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/project-board
+
+[Install]
+WantedBy=multi-user.target
