@@ -45,6 +45,7 @@ function isRecord(value) {
 function isValidEmail(value) {
   if (!EMAIL_PATTERN.test(value)) return false;
   const [local, domain] = value.split('@');
+  const labels = domain?.split('.') ?? [];
   return Boolean(
     local &&
       domain &&
@@ -54,7 +55,11 @@ function isValidEmail(value) {
       !domain.startsWith('.') &&
       !domain.endsWith('.') &&
       !domain.includes('..') &&
-      domain.split('.').every((label) => label.length > 0),
+      labels.length >= 2 &&
+      labels.every((label) =>
+        /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label),
+      ) &&
+      /^[a-z]{2,63}$/i.test(labels.at(-1)),
   );
 }
 

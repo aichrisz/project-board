@@ -90,6 +90,13 @@ describe('authenticated workspace server', () => {
         headers: identity('a@b..c'),
       });
       assert.equal(repeatedDomainDot.status, 401);
+
+      for (const email of ['a@-b.com', 'a@b_.com', 'a@localhost']) {
+        const invalidDomain = await request(base, '/api/workspace', {
+          headers: identity(email),
+        });
+        assert.equal(invalidDomain.status, 401, email);
+      }
     });
   });
 

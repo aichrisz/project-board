@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import { openWeeklySnapshot } from '../lib/snapshot';
+import { canRenderWorkspace } from '../lib/workspaceReadiness';
 import { useProjects } from '../store/ProjectContext';
 import { APP_VERSION } from '../version';
 import { KeyboardShortcuts } from './KeyboardShortcuts';
@@ -24,7 +25,7 @@ function tabClass({ isActive }: { isActive: boolean }) {
 }
 
 export function Layout() {
-  const { exportData, projects } = useProjects();
+  const { exportData, projects, ready } = useProjects();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuId = useId();
@@ -45,6 +46,10 @@ export function Layout() {
     triggerRef: menuBtnRef,
     onRequestClose: () => setMenuOpen(false),
   });
+
+  if (!canRenderWorkspace(ready)) {
+    return <main className="app-shell" role="status">Loading workspace…</main>;
+  }
 
   return (
     <div className="app-shell">
