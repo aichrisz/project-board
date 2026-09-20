@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { SEED_PROJECTS } from './seed';
 import { PROJECT_STATUSES, PROJECT_TYPES } from '../types';
 
-const REQUIRED_PROJECT_IDS = [
+const APPROVED_PROJECT_IDS = [
   'project-board',
   'kairo-streak-guard',
   'kei-observatory',
@@ -76,9 +76,9 @@ describe('curated current project inventory', () => {
     const idSet = new Set(ids);
 
     assert.deepEqual(
-      REQUIRED_PROJECT_IDS.filter((id) => !idSet.has(id)),
-      [],
-      'missing required current project IDs',
+      [...ids].sort(),
+      [...APPROVED_PROJECT_IDS].sort(),
+      'project IDs must match the approved inventory exactly',
     );
     assert.deepEqual(
       EXCLUDED_PROJECT_IDS.filter((id) => idSet.has(id)),
