@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily Project Board encrypted offsite backup
+After=project-board-backup.timer
+
+[Timer]
+OnCalendar=*-*-* 05:15:00
+RandomizedDelaySec=1h
+Persistent=true
+Unit=project-board-offsite-backup.service
+
+[Install]
+WantedBy=timers.target

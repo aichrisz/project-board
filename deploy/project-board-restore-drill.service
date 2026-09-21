@@ -1,0 +1,35 @@
+[Unit]
+Description=Project Board monthly encrypted-backup restore drill
+Wants=network-online.target
+After=network-online.target project-board-backup.service project-board-offsite-backup.service
+Conflicts=project-board-backup.service project-board-offsite-backup.service
+
+[Service]
+Type=oneshot
+User=project-board
+Group=project-board
+WorkingDirectory=/opt/project-board
+Environment="RESTIC_REPOSITORY=rclone:onedrive:Project Board"
+Environment=RESTIC_PASSWORD_FILE=/etc/project-board/restic-password
+Environment=PROJECT_BOARD_OWNER=
+Environment=EXPECTED_PROJECT_COUNT=31
+Environment=RESTORE_PARENT_DIR=/var/backups/project-board
+Environment=LOCK_FILE=/var/backups/project-board/.project-board-backup.lock
+EnvironmentFile=-/etc/project-board/project-board-offsite.env
+ExecStart=/opt/project-board/deploy/restore-drill.sh
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+ReadWritePaths=/var/backups/project-board
+
+[Install]
+WantedBy=multi-user.target

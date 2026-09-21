@@ -5,7 +5,9 @@ ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-bash -n "$ROOT_DIR/deploy/check.sh" "$ROOT_DIR/deploy/install.sh"
+bash -n "$ROOT_DIR/deploy/check.sh" "$ROOT_DIR/deploy/install.sh" \
+  "$ROOT_DIR/deploy/backup-offsite.sh" "$ROOT_DIR/deploy/backup-offsite.test.sh" \
+  "$ROOT_DIR/deploy/restore-drill.sh" "$ROOT_DIR/deploy/restore-drill.test.sh"
 
 CHECK_INSTALL="$ROOT_DIR/deploy/install.sh" node --input-type=module -e '
   import { readFileSync } from "node:fs";
@@ -26,7 +28,11 @@ CHECK_INSTALL="$ROOT_DIR/deploy/install.sh" node --input-type=module -e '
 NODE_BIN=$(command -v node)
 
 rendered_units=()
-for unit in project-board.service project-board-backup.service project-board-backup.timer; do
+for unit in \
+  project-board.service \
+  project-board-backup.service project-board-backup.timer \
+  project-board-offsite-backup.service project-board-offsite-backup.timer \
+  project-board-restore-drill.service project-board-restore-drill.timer; do
   rendered="$TMP_DIR/$unit"
   sed \
     -e "s|/opt/project-board|$TMP_DIR/opt/project-board|g" \
@@ -36,6 +42,12 @@ for unit in project-board.service project-board-backup.service project-board-bac
     "$ROOT_DIR/deploy/$unit" > "$rendered"
   rendered_units+=("$rendered")
 done
+
+install -d "$TMP_DIR/opt/project-board/deploy"
+for script in backup-offsite.sh restore-drill.sh; do
+  install -m 0755 "$ROOT_DIR/deploy/$script" "$TMP_DIR/opt/project-board/deploy/$script"
+done
+
 systemd-analyze verify "${rendered_units[@]}"
 
 missing_database="$TMP_DIR/missing.db"

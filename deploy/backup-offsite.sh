@@ -21,7 +21,7 @@ FLOCK_BIN=${FLOCK_BIN:-flock}
 }
 
 mkdir -p "$BACKUP_DIR"
-LOCK_FILE=${LOCK_FILE:-$BACKUP_DIR/.backup-offsite.lock}
+LOCK_FILE=${LOCK_FILE:-$BACKUP_DIR/.project-board-backup.lock}
 exec 9>"$LOCK_FILE"
 if ! "$FLOCK_BIN" -n 9; then
   printf 'offsite backup already running\n' >&2

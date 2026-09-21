@@ -45,7 +45,11 @@ install -D -o root -g root -m 0755 "$NODE_BIN" "$NODE_RUNTIME"
 install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0750 "$DATA_DIR" "$BACKUP_DIR"
 chown -R root:root "$APP_DIR"
 
-for unit in project-board.service project-board-backup.service project-board-backup.timer; do
+for unit in \
+  project-board.service \
+  project-board-backup.service project-board-backup.timer \
+  project-board-offsite-backup.service project-board-offsite-backup.timer \
+  project-board-restore-drill.service project-board-restore-drill.timer; do
   sed -e "s|@NODE_BIN@|$NODE_RUNTIME|g" \
     "$ROOT_DIR/deploy/$unit" > "$UNIT_DIR/$unit"
 done
