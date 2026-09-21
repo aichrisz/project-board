@@ -187,11 +187,12 @@ Before the first install, create these external files (never commit them):
 - `/etc/project-board/project-board-offsite.env`, root-owned mode `0600`, containing
   `PROJECT_BOARD_OWNER=aichriszme@gmail.com`,
   `RESTIC_REPOSITORY="rclone:onedrive:Project Board"`,
-  `RCLONE_CONFIG=/etc/project-board/rclone.conf`, `RESTIC_HOST=project-board`, and
+  `RCLONE_CONFIG=/var/lib/project-board/rclone/rclone.conf`, `RESTIC_HOST=project-board`, and
   `RESTIC_PATH=/var/backups/project-board/offsite/project-board.db`.
 - `/etc/project-board/restic-password`, owned by `project-board`, mode `0600`, with
   a generated Restic password.
-- `/etc/project-board/rclone.conf`, owned by `project-board`, mode `0600`, with the
+- `/var/lib/project-board/rclone/rclone.conf`, inside a `project-board`-owned mode
+  `0700` directory and itself mode `0600`, with the
   existing `onedrive:` remote copied from the root rclone config.
 
 Initialize once with the same environment and service identity:

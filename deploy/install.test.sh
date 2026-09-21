@@ -74,8 +74,9 @@ mkdir -p "$TMP_DIR/opt/project-board" "$TMP_DIR/etc/project-board" "$SYSTEMD_UNI
 printf 'previous-release\n' > "$TMP_DIR/opt/project-board/marker"
 printf 'PROJECT_BOARD_OWNER=owner@example.com\n' > "$TMP_DIR/etc/project-board/project-board-offsite.env"
 printf 'test-password\n' > "$TMP_DIR/etc/project-board/restic-password"
-printf '[onedrive]\ntype = onedrive\n' > "$TMP_DIR/etc/project-board/rclone.conf"
-chmod 600 "$TMP_DIR/etc/project-board"/*
+mkdir -p "$TMP_DIR/var/lib/project-board/rclone"
+printf '[onedrive]\ntype = onedrive\n' > "$TMP_DIR/var/lib/project-board/rclone/rclone.conf"
+chmod 600 "$TMP_DIR/etc/project-board"/* "$TMP_DIR/var/lib/project-board/rclone/rclone.conf"
 
 units=(
   project-board.service

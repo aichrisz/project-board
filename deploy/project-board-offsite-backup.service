@@ -14,7 +14,7 @@ Environment=DATABASE_PATH=/var/lib/project-board/project-board.db
 Environment=BACKUP_DIR=/var/backups/project-board
 Environment="RESTIC_REPOSITORY=rclone:onedrive:Project Board"
 Environment=RESTIC_PASSWORD_FILE=/etc/project-board/restic-password
-Environment=RCLONE_CONFIG=/etc/project-board/rclone.conf
+Environment=RCLONE_CONFIG=/var/lib/project-board/rclone/rclone.conf
 Environment=RESTIC_TIMEOUT_SEC=900
 Environment=LOCK_FILE=/var/backups/project-board/.project-board-backup.lock
 EnvironmentFile=/etc/project-board/project-board-offsite.env
@@ -34,7 +34,7 @@ LockPersonality=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 UMask=0077
 ReadOnlyPaths=/var/lib/project-board
-ReadWritePaths=/var/backups/project-board
+ReadWritePaths=/var/backups/project-board /var/lib/project-board/rclone
 
 [Install]
 WantedBy=multi-user.target
