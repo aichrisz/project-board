@@ -124,8 +124,13 @@ describe('curated current project inventory', () => {
     );
   });
 
-  it('uses the factual type for glasshouse', () => {
-    assert.equal(SEED_PROJECTS.find(({ id }) => id === 'glasshouse')?.type, 'tool');
+  it('uses factual metadata for glasshouse', () => {
+    const glasshouse = SEED_PROJECTS.find(({ id }) => id === 'glasshouse');
+    assert.equal(glasshouse?.type, 'tool');
+    assert.ok(!glasshouse?.summary.toLowerCase().includes('game'));
+    assert.ok(glasshouse?.tags.includes('tool'));
+    assert.ok(glasshouse?.tags.includes('browser-inspection'));
+    assert.ok(!glasshouse?.tags.includes('game'));
   });
 
   it('uses the factual stack for proxy-ops-dashboard', () => {
