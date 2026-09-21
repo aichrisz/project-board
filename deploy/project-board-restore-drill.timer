@@ -5,6 +5,7 @@ After=project-board-offsite-backup.timer
 [Timer]
 OnCalendar=*-*-01 07:15:00
 RandomizedDelaySec=1h
+AccuracySec=1min
 Persistent=true
 Unit=project-board-restore-drill.service
 

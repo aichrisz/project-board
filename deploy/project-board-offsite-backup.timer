@@ -5,6 +5,7 @@ After=project-board-backup.timer
 [Timer]
 OnCalendar=*-*-* 05:15:00
 RandomizedDelaySec=1h
+AccuracySec=1min
 Persistent=true
 Unit=project-board-offsite-backup.service
 

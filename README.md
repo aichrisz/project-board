@@ -179,9 +179,39 @@ sudo bash deploy/install.sh
 
 `deploy/install.sh` builds `/opt/project-board`, creates the unprivileged
 `project-board` service account, persists the database under
-`/var/lib/project-board`, and enables the daily backup timer under
-`/var/backups/project-board`. It installs only the local systemd units; Cloudflare
-Tunnel and Access must be configured separately.
+`/var/lib/project-board`, and enables local, encrypted offsite, and monthly
+restore-drill timers. Cloudflare Tunnel and Access remain separate.
+
+Before the first install, create these external files (never commit them):
+
+- `/etc/project-board/project-board-offsite.env`, root-owned mode `0600`, containing
+  `PROJECT_BOARD_OWNER=aichriszme@gmail.com`,
+  `RESTIC_REPOSITORY="rclone:onedrive:Project Board"`,
+  `RCLONE_CONFIG=/etc/project-board/rclone.conf`, `RESTIC_HOST=project-board`, and
+  `RESTIC_PATH=/var/backups/project-board/offsite/project-board.db`.
+- `/etc/project-board/restic-password`, owned by `project-board`, mode `0600`, with
+  a generated Restic password.
+- `/etc/project-board/rclone.conf`, owned by `project-board`, mode `0600`, with the
+  existing `onedrive:` remote copied from the root rclone config.
+
+Initialize once with the same environment and service identity:
+
+```bash
+sudo -u project-board bash -c '
+  set -a
+  source /etc/project-board/project-board-offsite.env
+  set +a
+  export RESTIC_PASSWORD_FILE=/etc/project-board/restic-password
+  restic init
+'
+```
+
+The daily job uploads only a SQLite online snapshot, keeps 7 daily / 5 weekly /
+12 monthly snapshots, and performs prune/check maintenance weekly. The monthly
+drill restores the tagged Project Board snapshot into a temporary directory,
+checks SQLite integrity, owner, and expected 31-project inventory, then removes
+the successful restore. Failed staging is retained for diagnosis and should be
+removed after the incident is resolved.
 
 ## Kei CLI
 

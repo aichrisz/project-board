@@ -1,5 +1,5 @@
 import { backup, DatabaseSync } from 'node:sqlite';
-import { access, mkdir, readdir, rename, stat, unlink } from 'node:fs/promises';
+import { access, lstat, mkdir, readdir, rename, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
@@ -27,6 +27,9 @@ async function removeExpiredBackups(backupDir) {
 }
 
 export async function runBackup({ databasePath, backupDir }) {
+  if ((await lstat(databasePath)).isSymbolicLink()) {
+    throw new Error('DATABASE_PATH must not be a symbolic link');
+  }
   await access(databasePath);
   await mkdir(backupDir, { recursive: true });
 

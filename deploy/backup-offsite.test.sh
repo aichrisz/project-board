@@ -11,6 +11,10 @@ assert_file() { [[ -f "$1" ]] || fail "expected file: $1"; }
 assert_dir() { [[ -d "$1" ]] || fail "expected directory: $1"; }
 assert_contains() { grep -F -- "$2" "$1" >/dev/null || fail "expected $2 in $1"; }
 assert_not_contains() { ! grep -F -- "$2" "$1" >/dev/null || fail "did not expect $2 in $1"; }
+assert_mode_owner() {
+  [[ "$(stat -c '%a' "$1")" == 600 ]] || fail "expected mode 0600: $1"
+  [[ "$(stat -c '%u' "$1")" == "$EUID" ]] || fail "expected current-user owner: $1"
+}
 
 [[ -x "$SCRIPT" ]] || fail "backup-offsite.sh must be executable"
 
@@ -19,12 +23,18 @@ mkdir -p "$FAKE_BIN"
 cat > "$FAKE_BIN/restic" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-cmd=${3:-}
+cmd=''
+for argument in "$@"; do
+  case "$argument" in
+    backup|forget|check|prune) cmd="$argument";;
+  esac
+done
 printf 'CALL' >> "$FAKE_RESTIC_LOG"
-printf ' %q' "$@" >> "$FAKE_RESTIC_LOG"
+printf ' %s' "$@" >> "$FAKE_RESTIC_LOG"
 printf '\n' >> "$FAKE_RESTIC_LOG"
 if [[ "$cmd" == backup ]]; then
-  printf '%s\n' "${4:?}" > "$FAKE_BACKUP_PATH"
+  last_argument=${!#}
+  printf '%s\n' "$last_argument" > "$FAKE_BACKUP_PATH"
 fi
 if [[ "${FAKE_RESTIC_FAIL_COMMAND:-}" == "$cmd" ]]; then
   exit 23
@@ -34,6 +44,11 @@ if [[ "${FAKE_RESTIC_SLEEP_COMMAND:-}" == "$cmd" ]]; then
 fi
 EOF
 chmod +x "$FAKE_BIN/restic"
+cat > "$FAKE_BIN/date" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "${FAKE_DATE_WEEKDAY:-3}"
+EOF
+chmod +x "$FAKE_BIN/date"
 cat > "$FAKE_BIN/rclone" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_RCLONE_LOG"
@@ -52,6 +67,11 @@ NODE
 PASSWORD_FILE="$TMP_DIR/restic-password"
 printf 'test-password\n' > "$PASSWORD_FILE"
 chmod 600 "$PASSWORD_FILE"
+RCLONE_CONFIG="$TMP_DIR/rclone.conf"
+printf '[onedrive]\ntype = onedrive\n' > "$RCLONE_CONFIG"
+chmod 600 "$RCLONE_CONFIG"
+assert_mode_owner "$PASSWORD_FILE"
+assert_mode_owner "$RCLONE_CONFIG"
 
 run_backup() {
   local backup_dir=$1
@@ -61,7 +81,10 @@ run_backup() {
     BACKUP_DIR="$backup_dir" \
     RESTIC_REPOSITORY='rclone:onedrive:Project Board' \
     RESTIC_PASSWORD_FILE="$PASSWORD_FILE" \
+    RCLONE_CONFIG="$RCLONE_CONFIG" \
     RESTIC_BIN="$FAKE_BIN/restic" \
+    DATE_BIN="$FAKE_BIN/date" \
+    FAKE_DATE_WEEKDAY="${FAKE_DATE_WEEKDAY:-3}" \
     FAKE_RESTIC_LOG="$TMP_DIR/restic.log" \
     FAKE_BACKUP_PATH="$TMP_DIR/backup-path" \
     FAKE_RCLONE_LOG="$TMP_DIR/rclone.log" \
@@ -73,21 +96,29 @@ run_backup() {
 run_backup "$TMP_DIR/success" || fail 'valid offsite backup should succeed'
 
 SNAPSHOT=$(<"$TMP_DIR/backup-path")
-[[ "$SNAPSHOT" == "$TMP_DIR/success/.offsite-"*/*.db ]] || fail 'restic must receive the staged SQLite snapshot'
+[[ "$SNAPSHOT" == "$TMP_DIR/success/offsite/project-board.db" ]] || fail 'restic must receive a stable offsite snapshot path'
 [[ "$SNAPSHOT" != "$DATABASE_PATH" ]] || fail 'restic must not receive the live database'
 [[ "$SNAPSHOT" != *.db-wal && "$SNAPSHOT" != *.db-shm ]] || fail 'restic must not receive WAL/SHM files'
 [[ ! -e "$SNAPSHOT" ]] || fail 'successful backup must clean the staged snapshot'
+assert_contains "$TMP_DIR/restic.log" '--host project-board'
+assert_contains "$TMP_DIR/restic.log" '--tag project-board'
+assert_contains "$TMP_DIR/restic.log" '--tag sqlite'
+assert_contains "$TMP_DIR/restic.log" '--group-by host,tags'
 assert_not_contains "$TMP_DIR/rclone.log" 'sync'
 assert_contains "$TMP_DIR/restic.log" 'backup'
 assert_contains "$TMP_DIR/restic.log" 'forget'
 assert_contains "$TMP_DIR/restic.log" '--keep-daily 7'
 assert_contains "$TMP_DIR/restic.log" '--keep-weekly 5'
 assert_contains "$TMP_DIR/restic.log" '--keep-monthly 12'
-assert_contains "$TMP_DIR/restic.log" '--prune'
-assert_contains "$TMP_DIR/restic.log" ' check'
+assert_not_contains "$TMP_DIR/restic.log" ' prune'
+assert_not_contains "$TMP_DIR/restic.log" ' check'
 if find "$TMP_DIR/success" -mindepth 1 -maxdepth 1 -type d -name '.offsite-*' -print -quit | grep -q .; then
   fail 'successful backup must remove staging'
 fi
+
+FAKE_DATE_WEEKDAY=7 run_backup "$TMP_DIR/maintenance" || fail 'weekly maintenance backup should succeed'
+assert_contains "$TMP_DIR/restic.log" ' prune'
+assert_contains "$TMP_DIR/restic.log" ' check'
 
 if run_backup "$TMP_DIR/unsafe" RESTIC_REPOSITORY='rclone:other:Project Board'; then
   fail 'unsafe repository must be rejected'
@@ -95,12 +126,27 @@ fi
 if env -u RESTIC_PASSWORD_FILE PATH="$FAKE_BIN:$PATH" \
     DATABASE_PATH="$DATABASE_PATH" BACKUP_DIR="$TMP_DIR/missing-secret" \
     RESTIC_REPOSITORY='rclone:onedrive:Project Board' RESTIC_BIN="$FAKE_BIN/restic" \
+    RCLONE_CONFIG="$RCLONE_CONFIG" DATE_BIN="$FAKE_BIN/date" \
     FAKE_RESTIC_LOG="$TMP_DIR/restic.log" FAKE_BACKUP_PATH="$TMP_DIR/backup-path" \
     FAKE_RCLONE_LOG="$TMP_DIR/rclone.log" "$SCRIPT"; then
   fail 'missing password file variable must be rejected'
 fi
 
-FAKE_RESTIC_FAIL_COMMAND=check run_backup "$TMP_DIR/failure" || true
+chmod 644 "$PASSWORD_FILE"
+if run_backup "$TMP_DIR/unsafe-mode"; then
+  fail 'password file with unsafe mode must be rejected'
+fi
+chmod 600 "$PASSWORD_FILE"
+
+if (( EUID == 0 )); then
+  chown 65534:65534 "$PASSWORD_FILE"
+  if run_backup "$TMP_DIR/unsafe-owner"; then
+    fail 'password file with unsafe owner must be rejected'
+  fi
+  chown 0:0 "$PASSWORD_FILE"
+fi
+
+FAKE_RESTIC_FAIL_COMMAND=backup run_backup "$TMP_DIR/failure" || true
 FAILURE_SNAPSHOT=$(<"$TMP_DIR/backup-path")
 assert_file "$FAILURE_SNAPSHOT"
 assert_dir "$(dirname "$FAILURE_SNAPSHOT")"

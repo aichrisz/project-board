@@ -16,14 +16,24 @@ mkdir -p "$FAKE_BIN"
 cat > "$FAKE_BIN/restic" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+command_name=''
+target=''
+previous=''
+for argument in "$@"; do
+  if [[ "$previous" == --target ]]; then target="$argument"; fi
+  case "$argument" in
+    restore|backup|forget|check|prune) command_name="$argument";;
+  esac
+  previous="$argument"
+done
 printf 'CALL' >> "$FAKE_RESTIC_LOG"
 printf ' %q' "$@" >> "$FAKE_RESTIC_LOG"
 printf '\n' >> "$FAKE_RESTIC_LOG"
-if [[ "${FAKE_RESTIC_FAIL_COMMAND:-}" == "${3:-}" ]]; then
+if [[ "${FAKE_RESTIC_FAIL_COMMAND:-}" == "$command_name" ]]; then
   exit 23
 fi
-if [[ "${3:-}" == restore ]]; then
-  target=${6:?restore target missing}
+if [[ "$command_name" == restore ]]; then
+  target=${target:?restore target missing}
   mkdir -p "$target/var/backups/project-board/.offsite-abc"
   cp "$FAKE_RESTORE_SOURCE" "$target/var/backups/project-board/.offsite-abc/project-board-20260921-031500.db"
   if [[ "${FAKE_RESTIC_EXTRA_SNAPSHOT:-}" == 1 ]]; then
@@ -53,6 +63,9 @@ NODE
 PASSWORD_FILE="$TMP_DIR/restic-password"
 printf 'test-password\n' > "$PASSWORD_FILE"
 chmod 600 "$PASSWORD_FILE"
+RCLONE_CONFIG="$TMP_DIR/rclone.conf"
+printf '[onedrive]\ntype = onedrive\n' > "$RCLONE_CONFIG"
+chmod 600 "$RCLONE_CONFIG"
 
 run_drill() {
   local restore_parent=$1
@@ -60,6 +73,9 @@ run_drill() {
   env PATH="$FAKE_BIN:$PATH" \
     RESTIC_REPOSITORY='rclone:onedrive:Project Board' \
     RESTIC_PASSWORD_FILE="$PASSWORD_FILE" \
+    RCLONE_CONFIG="$RCLONE_CONFIG" \
+    RESTIC_HOST='project-board' \
+    RESTIC_PATH='/var/backups/project-board/offsite/project-board.db' \
     PROJECT_BOARD_OWNER='owner@example.com' \
     EXPECTED_PROJECT_COUNT=31 \
     RESTORE_PARENT_DIR="$restore_parent" \
@@ -77,6 +93,10 @@ fi
 assert_contains "$TMP_DIR/restic.log" 'restore'
 assert_contains "$TMP_DIR/restic.log" 'latest'
 assert_contains "$TMP_DIR/restic.log" '--target'
+assert_contains "$TMP_DIR/restic.log" '--host project-board'
+assert_contains "$TMP_DIR/restic.log" '--tag project-board'
+assert_contains "$TMP_DIR/restic.log" '--tag sqlite'
+assert_contains "$TMP_DIR/restic.log" '--path /var/backups/project-board/offsite/project-board.db'
 
 if run_drill "$TMP_DIR/wrong-owner" PROJECT_BOARD_OWNER='other@example.com'; then
   fail 'wrong owner must fail'
@@ -97,6 +117,7 @@ if run_drill "$TMP_DIR/unsafe" RESTIC_REPOSITORY='rclone:other:Project Board'; t
 fi
 if env -u RESTIC_PASSWORD_FILE PATH="$FAKE_BIN:$PATH" \
     RESTIC_REPOSITORY='rclone:onedrive:Project Board' \
+    RCLONE_CONFIG="$RCLONE_CONFIG" \
     PROJECT_BOARD_OWNER='owner@example.com' \
     RESTORE_PARENT_DIR="$TMP_DIR/missing-secret" \
     RESTIC_BIN="$FAKE_BIN/restic" \

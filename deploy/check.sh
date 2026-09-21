@@ -9,6 +9,12 @@ bash -n "$ROOT_DIR/deploy/check.sh" "$ROOT_DIR/deploy/install.sh" \
   "$ROOT_DIR/deploy/backup-offsite.sh" "$ROOT_DIR/deploy/backup-offsite.test.sh" \
   "$ROOT_DIR/deploy/restore-drill.sh" "$ROOT_DIR/deploy/restore-drill.test.sh"
 
+bash "$ROOT_DIR/deploy/backup-offsite.test.sh"
+bash "$ROOT_DIR/deploy/restore-drill.test.sh"
+
+grep -Fq 'project-board-offsite-backup.timer' "$ROOT_DIR/deploy/install.sh"
+grep -Fq 'project-board-restore-drill.timer' "$ROOT_DIR/deploy/install.sh"
+
 CHECK_INSTALL="$ROOT_DIR/deploy/install.sh" node --input-type=module -e '
   import { readFileSync } from "node:fs";
   const script = readFileSync(process.env.CHECK_INSTALL, "utf8");

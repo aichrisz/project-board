@@ -4,20 +4,53 @@ set -euo pipefail
 NODE_BIN=${NODE_BIN:-node}
 RESTIC_BIN=${RESTIC_BIN:-restic}
 FLOCK_BIN=${FLOCK_BIN:-flock}
+TIMEOUT_BIN=${TIMEOUT_BIN:-timeout}
+RESTIC_TIMEOUT_SEC=${RESTIC_TIMEOUT_SEC:-900}
 
 : "${RESTIC_REPOSITORY:?RESTIC_REPOSITORY is required}"
 : "${RESTIC_PASSWORD_FILE:?RESTIC_PASSWORD_FILE is required}"
+: "${RCLONE_CONFIG:?RCLONE_CONFIG is required}"
 : "${PROJECT_BOARD_OWNER:?PROJECT_BOARD_OWNER is required}"
 EXPECTED_PROJECT_COUNT=${EXPECTED_PROJECT_COUNT:-31}
 RESTORE_PARENT_DIR=${RESTORE_PARENT_DIR:-/var/backups/project-board}
 LOCK_FILE=${LOCK_FILE:-$RESTORE_PARENT_DIR/.project-board-backup.lock}
+RESTIC_HOST=${RESTIC_HOST:-project-board}
+RESTIC_PATH=${RESTIC_PATH:-/var/backups/project-board/offsite/project-board.db}
 
 [[ "$RESTIC_REPOSITORY" == 'rclone:onedrive:Project Board' ]] || {
   printf 'RESTIC_REPOSITORY must be exactly rclone:onedrive:Project Board\n' >&2
   exit 1
 }
-[[ -r "$RESTIC_PASSWORD_FILE" ]] || {
-  printf 'RESTIC_PASSWORD_FILE must point to a readable file\n' >&2
+validate_secret_file() {
+  local name=$1
+  local path=$2
+  [[ -f "$path" && ! -L "$path" ]] || {
+    printf '%s must point to a regular file\n' "$name" >&2
+    exit 1
+  }
+  [[ "$(stat -c '%a' "$path")" == 600 ]] || {
+    printf '%s must have mode 0600\n' "$name" >&2
+    exit 1
+  }
+  [[ "$(stat -c '%u' "$path")" == "$EUID" ]] || {
+    printf '%s must be owned by the current user\n' "$name" >&2
+    exit 1
+  }
+}
+
+validate_secret_file RESTIC_PASSWORD_FILE "$RESTIC_PASSWORD_FILE"
+validate_secret_file RCLONE_CONFIG "$RCLONE_CONFIG"
+
+[[ "$RESTIC_HOST" == project-board ]] || {
+  printf 'RESTIC_HOST must be exactly project-board\n' >&2
+  exit 1
+}
+[[ "$RESTIC_PATH" == /var/backups/project-board/offsite/project-board.db ]] || {
+  printf 'RESTIC_PATH must be the offsite snapshot path\n' >&2
+  exit 1
+}
+[[ "$RESTIC_TIMEOUT_SEC" =~ ^[1-9][0-9]*$ ]] || {
+  printf 'RESTIC_TIMEOUT_SEC must be a positive integer\n' >&2
   exit 1
 }
 [[ "$EXPECTED_PROJECT_COUNT" =~ ^[0-9]+$ ]] || {
@@ -46,7 +79,17 @@ cleanup() {
 trap cleanup EXIT
 
 restore_dir=$(mktemp -d "$RESTORE_PARENT_DIR/.restore-XXXXXX")
-"$RESTIC_BIN" --repo "$RESTIC_REPOSITORY" restore latest --target "$restore_dir"
+run_restic() {
+  "$TIMEOUT_BIN" --signal=TERM --kill-after=30s "${RESTIC_TIMEOUT_SEC}s" \
+    "$RESTIC_BIN" "$@"
+}
+
+run_restic --repo "$RESTIC_REPOSITORY" restore latest \
+  --host "$RESTIC_HOST" \
+  --tag project-board \
+  --tag sqlite \
+  --path "$RESTIC_PATH" \
+  --target "$restore_dir"
 
 shopt -s nullglob
 snapshots=()

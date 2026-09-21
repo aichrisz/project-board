@@ -11,12 +11,18 @@ Group=project-board
 WorkingDirectory=/opt/project-board
 Environment="RESTIC_REPOSITORY=rclone:onedrive:Project Board"
 Environment=RESTIC_PASSWORD_FILE=/etc/project-board/restic-password
+Environment=RCLONE_CONFIG=/etc/project-board/rclone.conf
 Environment=PROJECT_BOARD_OWNER=
 Environment=EXPECTED_PROJECT_COUNT=31
 Environment=RESTORE_PARENT_DIR=/var/backups/project-board
 Environment=LOCK_FILE=/var/backups/project-board/.project-board-backup.lock
-EnvironmentFile=-/etc/project-board/project-board-offsite.env
+Environment=RESTIC_HOST=project-board
+Environment=RESTIC_PATH=/var/backups/project-board/offsite/project-board.db
+Environment=RESTIC_TIMEOUT_SEC=900
+EnvironmentFile=/etc/project-board/project-board-offsite.env
 ExecStart=/opt/project-board/deploy/restore-drill.sh
+TimeoutStartSec=15min
+TimeoutStopSec=30s
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true

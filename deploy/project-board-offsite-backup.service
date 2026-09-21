@@ -14,9 +14,13 @@ Environment=DATABASE_PATH=/var/lib/project-board/project-board.db
 Environment=BACKUP_DIR=/var/backups/project-board
 Environment="RESTIC_REPOSITORY=rclone:onedrive:Project Board"
 Environment=RESTIC_PASSWORD_FILE=/etc/project-board/restic-password
+Environment=RCLONE_CONFIG=/etc/project-board/rclone.conf
+Environment=RESTIC_TIMEOUT_SEC=900
 Environment=LOCK_FILE=/var/backups/project-board/.project-board-backup.lock
-EnvironmentFile=-/etc/project-board/project-board-offsite.env
+EnvironmentFile=/etc/project-board/project-board-offsite.env
 ExecStart=/opt/project-board/deploy/backup-offsite.sh
+TimeoutStartSec=15min
+TimeoutStopSec=30s
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true
