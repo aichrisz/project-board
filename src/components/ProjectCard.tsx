@@ -2,6 +2,7 @@ import { useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'r
 import { Link } from 'react-router';
 import type { Project } from '../types';
 import { ACTIVE_STATUSES, STATUS_LABELS, TYPE_LABELS } from '../types';
+import { getFreshness, getNextAction } from '../lib/projectSignals';
 import { LinkChips } from './LinkChips';
 
 type Props = {
@@ -42,6 +43,8 @@ export function ProjectCard({
 
   const canArchive = project.status !== 'archived';
   const canStartFocus = ACTIVE_STATUSES.includes(project.status);
+  const nextAction = getNextAction(project);
+  const freshness = getFreshness(project);
 
   return (
     <article
@@ -93,6 +96,18 @@ export function ProjectCard({
           </div>
         </div>
       </Link>
+
+      {(nextAction || freshness) && (
+        <div className="card-signals">
+          {nextAction && (
+            <div className="card-next-action">
+              <span className="card-signal-label">Next action</span>
+              <span className="card-next-action-value">{nextAction.title}</span>
+            </div>
+          )}
+          {freshness && <span className="card-freshness">{freshness}</span>}
+        </div>
+      )}
 
       {project.links.length > 0 && (
         <div

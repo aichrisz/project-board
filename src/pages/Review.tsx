@@ -5,6 +5,7 @@ import {
   computeReviewKpis,
   suggestReviewActions,
 } from '../lib/review';
+import { getActiveProjectAdvisory } from '../lib/projectSignals';
 import { focusMinutesInLocalWeek } from '../lib/focusSession';
 import { openWeeklySnapshot } from '../lib/snapshot';
 import { useProjects } from '../store/ProjectContext';
@@ -68,6 +69,10 @@ export function Review() {
   const focusMinutes = useMemo(
     () => focusMinutesInLocalWeek(focus.history),
     [focus.history],
+  );
+  const activeProjectAdvisory = useMemo(
+    () => getActiveProjectAdvisory(projects),
+    [projects],
   );
 
   function handleSoftArchiveIdle() {
@@ -142,6 +147,17 @@ export function Review() {
           </div>
         </div>
       </div>
+
+      <section
+        className="panel active-project-advisory"
+        data-tone={activeProjectAdvisory.tone}
+        aria-labelledby="active-projects-title"
+      >
+        <h2 id="active-projects-title" className="panel-title">
+          Active projects
+        </h2>
+        <p>{activeProjectAdvisory.message}</p>
+      </section>
 
       <div className="settings-actions review-actions">
         <button
