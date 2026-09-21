@@ -102,4 +102,46 @@ describe('curated current project inventory', () => {
       }
     }
   });
+
+  it('keeps in-progress projects below complete progress', () => {
+    for (const project of SEED_PROJECTS.filter(({ status }) => status === 'in_progress')) {
+      assert.ok(
+        project.steps.some(({ done }) => !done),
+        `${project.id} must have an unfinished step`,
+      );
+      assert.ok(project.progress_pct < 100, `${project.id} must not report 100% progress`);
+    }
+  });
+
+  it('keeps repository dates distinct from shared placeholder metadata', () => {
+    assert.ok(
+      new Set(SEED_PROJECTS.map(({ created_at }) => created_at)).size > 1,
+      'projects must use their repository creation dates, not one shared placeholder',
+    );
+    assert.ok(
+      new Set(SEED_PROJECTS.map(({ updated_at }) => updated_at)).size > 1,
+      'projects must use their repository update dates, not one shared placeholder',
+    );
+  });
+
+  it('uses the factual type for glasshouse', () => {
+    assert.equal(SEED_PROJECTS.find(({ id }) => id === 'glasshouse')?.type, 'tool');
+  });
+
+  it('uses the factual stack for proxy-ops-dashboard', () => {
+    const proxyOpsDashboard = SEED_PROJECTS.find(({ id }) => id === 'proxy-ops-dashboard');
+    assert.ok(proxyOpsDashboard?.stack.includes('python'));
+    assert.ok(!proxyOpsDashboard?.stack.includes('react'));
+    assert.ok(!proxyOpsDashboard?.stack.includes('typescript'));
+  });
+
+  it('uses the factual stack for ink-engine', () => {
+    const inkEngine = SEED_PROJECTS.find(({ id }) => id === 'ink-engine');
+    assert.ok(inkEngine?.stack.includes('javascript'));
+    assert.ok(!inkEngine?.stack.includes('typescript'));
+  });
+
+  it('uses the factual status for lobby-ledger', () => {
+    assert.equal(SEED_PROJECTS.find(({ id }) => id === 'lobby-ledger')?.status, 'in_progress');
+  });
 });

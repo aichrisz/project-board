@@ -1,10 +1,43 @@
 import type { Project } from '../types';
 import { withAutoProgress } from '../lib/progress';
 
-const created = '2026-01-01T00:00:00.000Z';
-const updated = '2026-09-01T00:00:00.000Z';
+type SeedProject = Omit<Project, 'created_at' | 'updated_at'>;
 
-const raw: Project[] = [
+const repositoryDates: Record<string, readonly [string, string]> = {
+  'project-board': ['2026-07-17T17:34:44.000Z', '2026-09-20T23:23:00.000Z'],
+  'kairo-streak-guard': ['2026-08-02T18:02:48.000Z', '2026-09-20T22:22:37.000Z'],
+  'kei-observatory': ['2026-07-06T12:28:21.000Z', '2026-09-20T18:57:19.000Z'],
+  'proxy-ops-dashboard': ['2026-08-24T21:16:49.000Z', '2026-09-20T18:02:05.000Z'],
+  'queue-quest': ['2026-09-01T18:33:56.000Z', '2026-09-01T20:00:29.000Z'],
+  'blank-zero': ['2026-08-30T13:49:52.000Z', '2026-09-01T14:46:29.000Z'],
+  'ink-engine': ['2026-08-31T10:59:57.000Z', '2026-08-31T11:02:55.000Z'],
+  glasshouse: ['2026-08-30T14:56:03.000Z', '2026-08-31T06:49:33.000Z'],
+  'origami-war': ['2026-08-30T21:44:57.000Z', '2026-08-30T21:45:22.000Z'],
+  'crown-fall': ['2026-08-30T15:23:06.000Z', '2026-08-30T16:32:30.000Z'],
+  'shift-cockpit': ['2026-07-18T00:27:01.000Z', '2026-08-26T19:13:32.000Z'],
+  'sprach-boss': ['2026-08-17T15:57:35.000Z', '2026-08-17T16:07:07.000Z'],
+  'hotel-scenario-lab': ['2026-08-04T14:35:59.000Z', '2026-08-12T09:17:41.000Z'],
+  'portfolio-hub': ['2026-08-10T01:29:13.000Z', '2026-08-10T01:29:25.000Z'],
+  'lobby-ledger': ['2026-07-10T16:58:10.000Z', '2026-07-10T19:11:33.000Z'],
+  'hotel-lobby-chaos-simulator': ['2026-07-05T18:25:59.000Z', '2026-08-10T00:56:51.000Z'],
+  'fridge-friendo': ['2026-07-20T09:49:45.000Z', '2026-08-04T23:25:20.000Z'],
+  'abel-immanuela-kristianto-portfolio': ['2026-07-08T17:39:13.000Z', '2026-07-10T00:20:01.000Z'],
+  nordhafen: ['2026-07-31T22:37:52.000Z', '2026-07-31T23:03:28.000Z'],
+  'ai-development-command-center': ['2026-07-28T21:02:43.000Z', '2026-07-29T17:36:14.000Z'],
+  'no-game-no-life-landing': ['2026-07-26T12:52:32.000Z', '2026-07-26T21:19:47.000Z'],
+  'pixel-palooza': ['2026-07-20T10:09:46.000Z', '2026-07-20T10:10:44.000Z'],
+  'my-api-profile': ['2026-07-20T10:04:50.000Z', '2026-07-20T10:05:21.000Z'],
+  'catalog-console': ['2026-07-20T10:01:28.000Z', '2026-07-20T10:02:50.000Z'],
+  aceztea: ['2026-07-20T09:57:56.000Z', '2026-07-20T09:59:25.000Z'],
+  'captcha-hell': ['2026-07-08T14:10:21.000Z', '2026-07-08T14:47:08.000Z'],
+  'website-that-slowly-dies': ['2026-07-08T12:40:49.000Z', '2026-07-08T12:41:07.000Z'],
+  'one-button-universe': ['2026-07-08T11:24:45.000Z', '2026-07-08T11:40:42.000Z'],
+  'inkwell-framework': ['2026-06-01T23:58:07.000Z', '2026-06-01T23:58:49.000Z'],
+  'workout-compass': ['2026-06-30T19:37:12.000Z', '2026-07-01T04:43:51.000Z'],
+  'yeva-birthday-card': ['2026-06-08T20:43:36.000Z', '2026-06-09T14:04:25.000Z'],
+};
+
+const raw: SeedProject[] = [
   {
     id: 'project-board',
     title: 'Project Board',
@@ -13,14 +46,15 @@ const raw: Project[] = [
     status: 'in_progress',
     summary: 'Local-first project inventory dashboard.',
     progress_pct: 0,
-    steps: [{ id: 'project-board-init', title: 'Repository initialized', done: true, order: 1 }],
+    steps: [
+      { id: 'project-board-init', title: 'Repository initialized', done: true, order: 1 },
+      { id: 'project-board-active', title: 'Continue active development/operations', done: false, order: 2 },
+    ],
     notes_md: 'Repository initialized.',
     links: [{ id: 'project-board-github', label: 'GitHub', url: 'https://github.com/aichrisz/project-board' }],
     tags: ['dashboard', 'local-first'],
     deadline: null,
     stack: ['react', 'typescript', 'vite'],
-    created_at: created,
-    updated_at: updated,
     starred: true,
   },
   {
@@ -31,14 +65,15 @@ const raw: Project[] = [
     status: 'in_progress',
     summary: 'Streak protection utility for Kairo.',
     progress_pct: 0,
-    steps: [{ id: 'kairo-streak-guard-init', title: 'Repository initialized', done: true, order: 1 }],
+    steps: [
+      { id: 'kairo-streak-guard-init', title: 'Repository initialized', done: true, order: 1 },
+      { id: 'kairo-streak-guard-active', title: 'Continue active development/operations', done: false, order: 2 },
+    ],
     notes_md: 'Repository initialized.',
     links: [{ id: 'kairo-streak-guard-github', label: 'GitHub', url: 'https://github.com/aichrisz/kairo-streak-guard' }],
     tags: ['kairo', 'streaks'],
     deadline: null,
     stack: ['typescript'],
-    created_at: created,
-    updated_at: updated,
     starred: true,
   },
   {
@@ -49,14 +84,15 @@ const raw: Project[] = [
     status: 'in_progress',
     summary: 'Observability dashboard for Kei operations.',
     progress_pct: 0,
-    steps: [{ id: 'kei-observatory-init', title: 'Repository initialized', done: true, order: 1 }],
+    steps: [
+      { id: 'kei-observatory-init', title: 'Repository initialized', done: true, order: 1 },
+      { id: 'kei-observatory-active', title: 'Continue active development/operations', done: false, order: 2 },
+    ],
     notes_md: 'Repository initialized.',
     links: [{ id: 'kei-observatory-github', label: 'GitHub', url: 'https://github.com/aichrisz/kei-observatory' }],
     tags: ['kei', 'observability'],
     deadline: null,
     stack: ['typescript', 'react'],
-    created_at: created,
-    updated_at: updated,
     starred: true,
   },
   {
@@ -67,14 +103,15 @@ const raw: Project[] = [
     status: 'in_progress',
     summary: 'Dashboard for proxy operations.',
     progress_pct: 0,
-    steps: [{ id: 'proxy-ops-dashboard-init', title: 'Repository initialized', done: true, order: 1 }],
+    steps: [
+      { id: 'proxy-ops-dashboard-init', title: 'Repository initialized', done: true, order: 1 },
+      { id: 'proxy-ops-dashboard-active', title: 'Continue active development/operations', done: false, order: 2 },
+    ],
     notes_md: 'Repository initialized.',
     links: [{ id: 'proxy-ops-dashboard-github', label: 'GitHub', url: 'https://github.com/aichrisz/proxy-ops-dashboard' }],
     tags: ['proxy', 'operations'],
     deadline: null,
-    stack: ['typescript', 'react'],
-    created_at: created,
-    updated_at: updated,
+    stack: ['python'],
     starred: true,
   },
   {
@@ -91,8 +128,6 @@ const raw: Project[] = [
     tags: ['game'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -109,8 +144,6 @@ const raw: Project[] = [
     tags: ['game'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -126,16 +159,14 @@ const raw: Project[] = [
     links: [{ id: 'ink-engine-github', label: 'GitHub', url: 'https://github.com/aichrisz/ink-engine' }],
     tags: ['engine', 'ink'],
     deadline: null,
-    stack: ['typescript'],
-    created_at: created,
-    updated_at: updated,
+    stack: ['javascript'],
     starred: false,
   },
   {
     id: 'glasshouse',
     title: 'Glasshouse',
     slug: 'glasshouse',
-    type: 'game',
+    type: 'tool',
     status: 'done',
     summary: 'Glasshouse game project.',
     progress_pct: 0,
@@ -145,8 +176,6 @@ const raw: Project[] = [
     tags: ['game'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -163,8 +192,6 @@ const raw: Project[] = [
     tags: ['game', 'origami'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -181,8 +208,6 @@ const raw: Project[] = [
     tags: ['game'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -193,14 +218,15 @@ const raw: Project[] = [
     status: 'in_progress',
     summary: 'Hotel shift handover tool.',
     progress_pct: 0,
-    steps: [{ id: 'shift-cockpit-init', title: 'Repository initialized', done: true, order: 1 }],
+    steps: [
+      { id: 'shift-cockpit-init', title: 'Repository initialized', done: true, order: 1 },
+      { id: 'shift-cockpit-active', title: 'Continue active development/operations', done: false, order: 2 },
+    ],
     notes_md: 'Repository initialized.',
     links: [{ id: 'shift-cockpit-github', label: 'GitHub', url: 'https://github.com/aichrisz/shift-cockpit' }],
     tags: ['hotel', 'handover'],
     deadline: null,
     stack: ['react', 'typescript', 'vite'],
-    created_at: created,
-    updated_at: updated,
     starred: true,
   },
   {
@@ -211,14 +237,15 @@ const raw: Project[] = [
     status: 'in_progress',
     summary: 'Language practice project.',
     progress_pct: 0,
-    steps: [{ id: 'sprach-boss-init', title: 'Repository initialized', done: true, order: 1 }],
+    steps: [
+      { id: 'sprach-boss-init', title: 'Repository initialized', done: true, order: 1 },
+      { id: 'sprach-boss-active', title: 'Continue active development/operations', done: false, order: 2 },
+    ],
     notes_md: 'Repository initialized.',
     links: [{ id: 'sprach-boss-github', label: 'GitHub', url: 'https://github.com/aichrisz/sprach-boss' }],
     tags: ['language', 'learning'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -229,14 +256,15 @@ const raw: Project[] = [
     status: 'in_progress',
     summary: 'Hotel scenario practice lab.',
     progress_pct: 0,
-    steps: [{ id: 'hotel-scenario-lab-init', title: 'Repository initialized', done: true, order: 1 }],
+    steps: [
+      { id: 'hotel-scenario-lab-init', title: 'Repository initialized', done: true, order: 1 },
+      { id: 'hotel-scenario-lab-active', title: 'Continue active development/operations', done: false, order: 2 },
+    ],
     notes_md: 'Repository initialized.',
     links: [{ id: 'hotel-scenario-lab-github', label: 'GitHub', url: 'https://github.com/aichrisz/hotel-scenario-lab' }],
     tags: ['hotel', 'learning'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -247,14 +275,15 @@ const raw: Project[] = [
     status: 'in_progress',
     summary: 'Portfolio hub website.',
     progress_pct: 0,
-    steps: [{ id: 'portfolio-hub-init', title: 'Repository initialized', done: true, order: 1 }],
+    steps: [
+      { id: 'portfolio-hub-init', title: 'Repository initialized', done: true, order: 1 },
+      { id: 'portfolio-hub-active', title: 'Continue active development/operations', done: false, order: 2 },
+    ],
     notes_md: 'Repository initialized.',
     links: [{ id: 'portfolio-hub-github', label: 'GitHub', url: 'https://github.com/aichrisz/portfolio-hub' }],
     tags: ['portfolio', 'web'],
     deadline: null,
     stack: ['typescript', 'react'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -262,17 +291,18 @@ const raw: Project[] = [
     title: 'Lobby Ledger',
     slug: 'lobby-ledger',
     type: 'tool',
-    status: 'done',
+    status: 'in_progress',
     summary: 'Hotel lobby tracking tool.',
     progress_pct: 0,
-    steps: [{ id: 'lobby-ledger-init', title: 'Repository initialized', done: true, order: 1 }],
+    steps: [
+      { id: 'lobby-ledger-init', title: 'Repository initialized', done: true, order: 1 },
+      { id: 'lobby-ledger-active', title: 'Continue active development/operations', done: false, order: 2 },
+    ],
     notes_md: 'Repository initialized.',
     links: [{ id: 'lobby-ledger-github', label: 'GitHub', url: 'https://github.com/aichrisz/lobby-ledger' }],
     tags: ['hotel', 'lobby'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -289,8 +319,6 @@ const raw: Project[] = [
     tags: ['hotel', 'simulation', 'game'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -307,8 +335,6 @@ const raw: Project[] = [
     tags: ['utility'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -325,8 +351,6 @@ const raw: Project[] = [
     tags: ['portfolio', 'web'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -343,8 +367,6 @@ const raw: Project[] = [
     tags: ['web'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -355,14 +377,15 @@ const raw: Project[] = [
     status: 'in_progress',
     summary: 'Command center for AI development work.',
     progress_pct: 0,
-    steps: [{ id: 'ai-development-command-center-init', title: 'Repository initialized', done: true, order: 1 }],
+    steps: [
+      { id: 'ai-development-command-center-init', title: 'Repository initialized', done: true, order: 1 },
+      { id: 'ai-development-command-center-active', title: 'Continue active development/operations', done: false, order: 2 },
+    ],
     notes_md: 'Repository initialized.',
     links: [{ id: 'ai-development-command-center-github', label: 'GitHub', url: 'https://github.com/aichrisz/ai-development-command-center' }],
     tags: ['ai', 'operations'],
     deadline: null,
     stack: ['typescript', 'react'],
-    created_at: created,
-    updated_at: updated,
     starred: true,
   },
   {
@@ -379,8 +402,6 @@ const raw: Project[] = [
     tags: ['landing', 'web'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -397,8 +418,6 @@ const raw: Project[] = [
     tags: ['pixel-art', 'game'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -415,8 +434,6 @@ const raw: Project[] = [
     tags: ['api', 'profile'],
     deadline: null,
     stack: ['typescript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -433,8 +450,6 @@ const raw: Project[] = [
     tags: ['catalog', 'console'],
     deadline: null,
     stack: ['typescript', 'react'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -451,8 +466,6 @@ const raw: Project[] = [
     tags: ['web'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -469,8 +482,6 @@ const raw: Project[] = [
     tags: ['captcha', 'game'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -487,8 +498,6 @@ const raw: Project[] = [
     tags: ['experimental', 'web'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -505,8 +514,6 @@ const raw: Project[] = [
     tags: ['one-button', 'game'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -523,8 +530,6 @@ const raw: Project[] = [
     tags: ['framework'],
     deadline: null,
     stack: ['typescript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -535,14 +540,15 @@ const raw: Project[] = [
     status: 'in_progress',
     summary: 'Workout planning tool.',
     progress_pct: 0,
-    steps: [{ id: 'workout-compass-init', title: 'Repository initialized', done: true, order: 1 }],
+    steps: [
+      { id: 'workout-compass-init', title: 'Repository initialized', done: true, order: 1 },
+      { id: 'workout-compass-active', title: 'Continue active development/operations', done: false, order: 2 },
+    ],
     notes_md: 'Repository initialized.',
     links: [{ id: 'workout-compass-local', label: 'Local path', url: '/root/projects/workout-compass' }],
     tags: ['workout', 'health'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
   {
@@ -559,10 +565,11 @@ const raw: Project[] = [
     tags: ['birthday', 'card'],
     deadline: null,
     stack: ['html', 'css', 'javascript'],
-    created_at: created,
-    updated_at: updated,
     starred: false,
   },
 ];
 
-export const SEED_PROJECTS: Project[] = raw.map((project) => withAutoProgress(project));
+export const SEED_PROJECTS: Project[] = raw.map((project) => {
+  const [created_at, updated_at] = repositoryDates[project.id];
+  return withAutoProgress({ ...project, created_at, updated_at });
+});
