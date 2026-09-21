@@ -112,6 +112,10 @@ describe('getFreshness', () => {
       null,
     );
   });
+
+  it('does not show a freshness badge for an invalid updated_at value', () => {
+    assert.equal(getFreshness(makeProject({ updated_at: 'not-a-date' }), now), null);
+  });
 });
 
 describe('getActiveProjectAdvisory', () => {

@@ -3022,7 +3022,10 @@ a.link-chip-main:hover {
 }
 
 .card-head .card-main-link {
+  display: flex;
+  align-items: center;
   flex: 1;
+  min-height: var(--touch);
 }
 
 .card-title {
@@ -3054,7 +3057,9 @@ a.link-chip-main:hover {
 }
 
 .card-progress-link {
-  display: block;
+  display: flex;
+  align-items: center;
+  min-height: var(--touch);
   color: inherit;
   text-decoration: none;
 }
@@ -3065,6 +3070,7 @@ a.link-chip-main:hover {
 }
 
 .progress-block {
+  width: 100%;
   gap: var(--pb-space-4);
 }
 

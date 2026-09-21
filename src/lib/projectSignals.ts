@@ -28,8 +28,10 @@ export function getNextAction(project: Project): Step | null {
 export function getFreshness(project: Project, now = new Date()): Freshness | null {
   if (isTerminal(project.status)) return null;
 
-  const daysSinceUpdate =
-    calendarDayNumber(now) - calendarDayNumber(new Date(project.updated_at));
+  const updatedAt = new Date(project.updated_at);
+  if (Number.isNaN(updatedAt.getTime())) return null;
+
+  const daysSinceUpdate = calendarDayNumber(now) - calendarDayNumber(updatedAt);
   if (daysSinceUpdate < 30) return null;
   return daysSinceUpdate < 60 ? 'Quiet' : 'Review';
 }
