@@ -16,12 +16,25 @@ CONFIG_DIR=/etc/project-board
 RESTIC_PASSWORD_FILE="$CONFIG_DIR/restic-password"
 RCLONE_CONFIG="$CONFIG_DIR/rclone.conf"
 OFFSITE_ENV="$CONFIG_DIR/project-board-offsite.env"
+SYSTEMD_UNIT_DIR=${SYSTEMD_UNIT_DIR:-/etc/systemd/system}
 APP_PARENT_DIR=$(dirname "$APP_DIR")
 UNIT_DIR=$(mktemp -d)
+UNIT_ROLLBACK_DIR=$(mktemp -d)
 RELEASE_DIR=''
 ROLLBACK_DIR=''
 app_swapped=0
 service_was_active=0
+unit_rollback_captured=0
+prior_enabled_units=()
+units=(
+  project-board.service
+  project-board-backup.service
+  project-board-backup.timer
+  project-board-offsite-backup.service
+  project-board-offsite-backup.timer
+  project-board-restore-drill.service
+  project-board-restore-drill.timer
+)
 
 cleanup() {
   local status=$?
@@ -41,6 +54,20 @@ cleanup() {
     elif [[ -n "$ROLLBACK_DIR" ]]; then
       rm -rf -- "$ROLLBACK_DIR" || true
     fi
+    if (( unit_rollback_captured == 1 )); then
+      install -d -o root -g root -m 0755 "$SYSTEMD_UNIT_DIR" || true
+      for unit in "${units[@]}"; do
+        rm -f -- "$SYSTEMD_UNIT_DIR/$unit" || true
+        if [[ -e "$UNIT_ROLLBACK_DIR/$unit" || -L "$UNIT_ROLLBACK_DIR/$unit" ]]; then
+          cp -a -- "$UNIT_ROLLBACK_DIR/$unit" "$SYSTEMD_UNIT_DIR/$unit" || true
+        fi
+      done
+      systemctl daemon-reload || true
+      systemctl disable "${units[@]}" || true
+      if (( ${#prior_enabled_units[@]} > 0 )); then
+        systemctl enable "${prior_enabled_units[@]}" || true
+      fi
+    fi
     if (( service_was_active == 1 )); then
       if ! systemctl start project-board.service; then
         printf 'install failed and the previous project-board service could not be restarted\n' >&2
@@ -54,6 +81,7 @@ cleanup() {
     rm -rf -- "$RELEASE_DIR" || true
   fi
   rm -rf -- "$UNIT_DIR" || true
+  rm -rf -- "$UNIT_ROLLBACK_DIR" || true
   exit "$status"
 }
 trap cleanup EXIT
@@ -185,19 +213,23 @@ RELEASE_DIR=''
 app_swapped=1
 install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0750 "$DATA_DIR" "$BACKUP_DIR"
 
-units=(
-  project-board.service
-  project-board-backup.service
-  project-board-backup.timer
-  project-board-offsite-backup.service
-  project-board-offsite-backup.timer
-  project-board-restore-drill.service
-  project-board-restore-drill.timer
-)
+if [[ ! -d "$SYSTEMD_UNIT_DIR" ]]; then
+  install -d -o root -g root -m 0755 "$SYSTEMD_UNIT_DIR"
+fi
+for unit in "${units[@]}"; do
+  if [[ -e "$SYSTEMD_UNIT_DIR/$unit" || -L "$SYSTEMD_UNIT_DIR/$unit" ]]; then
+    cp -a -- "$SYSTEMD_UNIT_DIR/$unit" "$UNIT_ROLLBACK_DIR/$unit"
+  fi
+  if systemctl is-enabled --quiet "$unit"; then
+    prior_enabled_units+=("$unit")
+  fi
+done
+unit_rollback_captured=1
+
 for unit in "${units[@]}"; do
   sed -e "s|@NODE_BIN@|$NODE_RUNTIME|g" \
     "$ROOT_DIR/deploy/$unit" > "$UNIT_DIR/$unit"
-  install -o root -g root -m 0644 "$UNIT_DIR/$unit" "/etc/systemd/system/$unit"
+  install -o root -g root -m 0644 "$UNIT_DIR/$unit" "$SYSTEMD_UNIT_DIR/$unit"
 done
 systemctl daemon-reload
 systemctl enable \

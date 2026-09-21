@@ -10,9 +10,17 @@ bash -n "$ROOT_DIR/deploy/check.sh" "$ROOT_DIR/deploy/install.sh" \
   "$ROOT_DIR/deploy/restore-drill.sh" "$ROOT_DIR/deploy/restore-drill.test.sh" \
   "$ROOT_DIR/deploy/install.test.sh"
 
-bash "$ROOT_DIR/deploy/install.test.sh"
-bash "$ROOT_DIR/deploy/backup-offsite.test.sh"
-bash "$ROOT_DIR/deploy/restore-drill.test.sh"
+CHECK_INSTALL_TEST="$ROOT_DIR/deploy/install.test.sh" node --input-type=module -e '
+  import { readFileSync } from "node:fs";
+  const test = readFileSync(process.env.CHECK_INSTALL_TEST, "utf8");
+  if (
+    !test.includes("SYSTEMD_UNIT_DIR=\"$TMP_DIR/etc/systemd/system\"") ||
+    !test.includes("SYSTEMD_UNIT_DIR=\"$SYSTEMD_UNIT_DIR\"") ||
+    new RegExp("SYSTEMD_UNIT_DIR=(?:\\\"|\\x27)?/etc/systemd/system").test(test)
+  ) {
+    throw new Error("install.test.sh must sandbox every systemd unit write");
+  }
+'
 
 grep -Fq 'project-board-offsite-backup.timer' "$ROOT_DIR/deploy/install.sh"
 grep -Fq 'project-board-restore-drill.timer' "$ROOT_DIR/deploy/install.sh"
@@ -38,6 +46,10 @@ CHECK_INSTALL="$ROOT_DIR/deploy/install.sh" node --input-type=module -e '
     throw new Error("install.sh must back up before staging and atomically preserve/restore the previous release");
   }
 '
+
+bash "$ROOT_DIR/deploy/install.test.sh"
+bash "$ROOT_DIR/deploy/backup-offsite.test.sh"
+bash "$ROOT_DIR/deploy/restore-drill.test.sh"
 
 NODE_BIN=$(command -v node)
 
