@@ -63,6 +63,7 @@ describe('remote workspace API bridge', () => {
       status: 'failed',
       shouldSave: false,
       revision: CREATION_ETAG,
+      reloadRequired: true,
     });
   });
 
@@ -127,6 +128,32 @@ describe('remote workspace API bridge', () => {
     await assert.rejects(queueRemoteWorkspaceSave(workspace, sync, fetcher), /workspace request failed: 500/);
     await queueRemoteWorkspaceSave(workspace, sync, fetcher);
     assert.equal(attempts, 2);
+    assert.equal(sync.etag, '"v2"');
+  });
+
+  it('does not report a missing-ETag save as the successful baseline and retries later', async () => {
+    let attempts = 0;
+    const sync: WorkspaceSyncState = { etag: '"v1"', blocked: false };
+    const nextWorkspace: RemoteWorkspace = {
+      ...workspace,
+      activity: [{ id: 'a1', at: '2026-01-01T00:00:00.000Z', type: 'project_created', message: 'created' }],
+    };
+    const fetcher = async () => {
+      attempts += 1;
+      return attempts === 1
+        ? response(204)
+        : response(204, undefined, { etag: '"v2"' });
+    };
+
+    await assert.rejects(
+      queueRemoteWorkspaceSave(workspace, sync, fetcher),
+      /workspace response missing ETag/,
+    );
+    assert.equal(sync.etag, '"v1"');
+    assert.deepEqual(
+      await queueRemoteWorkspaceSave(nextWorkspace, sync, fetcher),
+      nextWorkspace,
+    );
     assert.equal(sync.etag, '"v2"');
   });
 

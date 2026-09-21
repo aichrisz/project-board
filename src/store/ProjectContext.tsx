@@ -37,6 +37,8 @@ import {
   CREATION_ETAG,
   hydrateRemoteWorkspace,
   queueRemoteWorkspaceSave,
+  REMOTE_HYDRATION_FAILURE,
+  REMOTE_SAVE_FAILURE,
   WorkspaceConflictError,
   type RemoteWorkspace,
   type WorkspaceSyncState,
@@ -87,6 +89,7 @@ type ProjectContextValue = {
   focus: FocusState;
   ready: boolean;
   reloadRequired: boolean;
+  remotePersistenceError: string | null;
   getProject: (id: string) => Project | undefined;
   createProject: (input: ProjectInput) => Project;
   updateProject: (id: string, patch: Partial<Project>) => void;
@@ -198,18 +201,41 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [remoteReady, setRemoteReady] = useState(false);
   const [reloadRequired, setReloadRequired] = useState(false);
+  const [remotePersistenceError, setRemotePersistenceError] = useState<string | null>(null);
   const remoteSyncRef = useRef<'loading' | 'ready' | 'failed'>('loading');
   const remoteRevisionRef = useRef<WorkspaceSyncState>({
     etag: CREATION_ETAG,
     blocked: false,
   });
   const remoteBaselineRef = useRef<string | null>(null);
+  const remotePendingRef = useRef<string | null>(null);
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
   const focusRef = useRef(focus);
   focusRef.current = focus;
   const activityRef = useRef(activity);
   activityRef.current = activity;
+
+  const saveRemoteWorkspace = useCallback((workspace: RemoteWorkspace) => {
+    const key = workspaceKey(workspace);
+    if (remotePendingRef.current === key) return;
+    remotePendingRef.current = key;
+    void queueRemoteWorkspaceSave(workspace, remoteRevisionRef.current)
+      .then((savedWorkspace) => {
+        remoteBaselineRef.current = workspaceKey(savedWorkspace);
+        if (remotePendingRef.current === key) remotePendingRef.current = null;
+        setRemotePersistenceError(null);
+      })
+      .catch((error: unknown) => {
+        if (remotePendingRef.current === key) remotePendingRef.current = null;
+        if (error instanceof WorkspaceConflictError) {
+          setReloadRequired(true);
+          setRemotePersistenceError(null);
+          return;
+        }
+        setRemotePersistenceError(REMOTE_SAVE_FAILURE);
+      });
+  }, []);
 
   const pushActivity = useCallback((event: ActivityEvent) => {
     const next = prependActivity(activityRef.current, event);
@@ -335,11 +361,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             : hydrated.workspace;
         applySnapshot(snapshot);
         remoteRevisionRef.current = { etag: hydrated.revision, blocked: false };
-        remoteBaselineRef.current = workspaceKey(snapshot);
+        remoteBaselineRef.current =
+          hydrated.status === 'ready' && !hydrated.shouldSave
+            ? workspaceKey(snapshot)
+            : null;
+        remotePendingRef.current = null;
+        if (hydrated.reloadRequired) {
+          setReloadRequired(true);
+          setRemotePersistenceError(REMOTE_HYDRATION_FAILURE);
+        }
         if (hydrated.shouldSave) {
-          queueRemoteWorkspaceSave(snapshot, remoteRevisionRef.current).catch((error: unknown) => {
-            if (error instanceof WorkspaceConflictError) setReloadRequired(true);
-          });
+          saveRemoteWorkspace(snapshot);
         }
         saveActivity(snapshot.activity);
         remoteSyncRef.current = hydrated.status;
@@ -350,7 +382,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [saveRemoteWorkspace]);
 
   useEffect(() => {
     if (!ready) return;
@@ -363,12 +395,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     if (remoteRevisionRef.current.blocked) return;
     const workspace = makeRemoteWorkspace(projects, settings, focus, activity);
     const key = workspaceKey(workspace);
-    if (key === remoteBaselineRef.current) return;
-    remoteBaselineRef.current = key;
-    queueRemoteWorkspaceSave(workspace, remoteRevisionRef.current).catch((error: unknown) => {
-      if (error instanceof WorkspaceConflictError) setReloadRequired(true);
-    });
-  }, [activity, focus, projects, remoteReady, ready, settings]);
+    if (key === remoteBaselineRef.current || key === remotePendingRef.current) return;
+    saveRemoteWorkspace(workspace);
+  }, [activity, focus, projects, remoteReady, ready, saveRemoteWorkspace, settings]);
 
   useEffect(() => {
     if (!ready) return;
@@ -987,6 +1016,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       focus,
       ready,
       reloadRequired,
+      remotePersistenceError,
       getProject,
       createProject,
       updateProject,
@@ -1019,6 +1049,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       focus,
       ready,
       reloadRequired,
+      remotePersistenceError,
       getProject,
       createProject,
       updateProject,

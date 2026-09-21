@@ -15,9 +15,14 @@ export type HydratedWorkspace = {
   status: 'ready' | 'failed';
   shouldSave: boolean;
   revision: string;
+  reloadRequired: boolean;
 };
 
 export const CREATION_ETAG = '"workspace-missing"';
+export const REMOTE_HYDRATION_FAILURE =
+  'Remote workspace could not be loaded. Your local data is preserved, but saving is unavailable until you reload.';
+export const REMOTE_SAVE_FAILURE =
+  'Remote save failed. Your local changes are preserved; make another change to retry.';
 
 export class WorkspaceConflictError extends Error {
   constructor() {
@@ -27,7 +32,7 @@ export class WorkspaceConflictError extends Error {
 }
 
 const API_PATH = '/api/workspace';
-let saveQueue = Promise.resolve();
+let saveQueue: Promise<unknown> = Promise.resolve();
 
 function responseEtag(response: Response): string {
   const etag = response.headers.get('etag');
@@ -58,6 +63,7 @@ export async function hydrateRemoteWorkspace(
         status: 'ready',
         shouldSave: false,
         revision: remote.revision,
+        reloadRequired: false,
       };
     }
     return {
@@ -65,9 +71,16 @@ export async function hydrateRemoteWorkspace(
       status: 'ready',
       shouldSave: true,
       revision: remote.revision,
+      reloadRequired: false,
     };
   } catch {
-    return { workspace: localWorkspace, status: 'failed', shouldSave: false, revision: CREATION_ETAG };
+    return {
+      workspace: localWorkspace,
+      status: 'failed',
+      shouldSave: false,
+      revision: CREATION_ETAG,
+      reloadRequired: true,
+    };
   }
 }
 
@@ -75,8 +88,8 @@ export function queueRemoteWorkspaceSave(
   workspace: RemoteWorkspace,
   sync: WorkspaceSyncState,
   fetcher: WorkspaceFetch = fetch,
-): Promise<void> {
-  const save = async () => {
+): Promise<RemoteWorkspace> {
+  const save = async (): Promise<RemoteWorkspace> => {
     if (sync.blocked) throw new WorkspaceConflictError();
     const response = await fetcher(API_PATH, {
       method: 'PUT',
@@ -90,6 +103,7 @@ export function queueRemoteWorkspaceSave(
     }
     if (!response.ok) throw new Error(`workspace request failed: ${response.status}`);
     sync.etag = responseEtag(response);
+    return workspace;
   };
   const next = saveQueue.then(save, save);
   saveQueue = next.catch(() => undefined);
