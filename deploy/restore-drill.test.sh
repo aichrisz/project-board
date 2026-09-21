@@ -34,11 +34,8 @@ if [[ "${FAKE_RESTIC_FAIL_COMMAND:-}" == "$command_name" ]]; then
 fi
 if [[ "$command_name" == restore ]]; then
   target=${target:?restore target missing}
-  mkdir -p "$target/var/backups/project-board/.offsite-abc"
-  cp "$FAKE_RESTORE_SOURCE" "$target/var/backups/project-board/.offsite-abc/project-board-20260921-031500.db"
-  if [[ "${FAKE_RESTIC_EXTRA_SNAPSHOT:-}" == 1 ]]; then
-    cp "$FAKE_RESTORE_SOURCE" "$target/var/backups/project-board/.offsite-abc/project-board-20260921-031501.db"
-  fi
+  mkdir -p "$target/var/backups/project-board/offsite"
+  cp "$FAKE_RESTORE_SOURCE" "$target/var/backups/project-board/offsite/project-board.db"
   if [[ "${FAKE_RESTIC_SLEEP_RESTORE:-}" == 1 ]]; then
     sleep 2
   fi
@@ -108,9 +105,6 @@ if run_drill "$TMP_DIR/wrong-count" EXPECTED_PROJECT_COUNT=30; then
   fail 'unexpected project count must fail'
 fi
 
-if run_drill "$TMP_DIR/multiple" FAKE_RESTIC_EXTRA_SNAPSHOT=1; then
-  fail 'ambiguous database snapshots must fail'
-fi
 
 if run_drill "$TMP_DIR/unsafe" RESTIC_REPOSITORY='rclone:other:Project Board'; then
   fail 'unsafe repository must be rejected'

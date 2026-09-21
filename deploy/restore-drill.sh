@@ -91,16 +91,11 @@ run_restic --repo "$RESTIC_REPOSITORY" restore latest \
   --path "$RESTIC_PATH" \
   --target "$restore_dir"
 
-shopt -s nullglob
-snapshots=()
-while IFS= read -r -d '' snapshot_path; do
-  snapshots+=("$snapshot_path")
-done < <(find "$restore_dir" -type f -name 'project-board-*.db' -print0)
-if (( ${#snapshots[@]} != 1 )); then
-  printf 'expected exactly one project-board SQLite snapshot in %s\n' "$restore_dir" >&2
+snapshot="$restore_dir/${RESTIC_PATH#/}"
+if [[ ! -f "$snapshot" || -L "$snapshot" ]]; then
+  printf 'expected restored SQLite snapshot at %s\n' "$snapshot" >&2
   exit 1
 fi
-snapshot=${snapshots[0]}
 
 CHECK_DATABASE="$snapshot" \
 PROJECT_BOARD_OWNER="$PROJECT_BOARD_OWNER" \

@@ -13,6 +13,7 @@ WorkingDirectory=/opt/project-board
 Environment=DATABASE_PATH=/var/lib/project-board/project-board.db
 Environment=BACKUP_DIR=/var/backups/project-board
 Environment=PATH=/opt/project-board/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+Environment=XDG_CACHE_HOME=/var/backups/project-board/.cache
 Environment="RESTIC_REPOSITORY=rclone:onedrive:Project Board"
 Environment=RESTIC_PASSWORD_FILE=/etc/project-board/restic-password
 Environment=RCLONE_CONFIG=/var/lib/project-board/rclone/rclone.conf
