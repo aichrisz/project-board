@@ -196,6 +196,7 @@ RELEASE_DIR=$(mktemp -d "$APP_PARENT_DIR/.project-board-release.XXXXXX")
 cp -a dist server package.json package-lock.json deploy "$RELEASE_DIR"/
 install -D -o root -g root -m 0755 "$NODE_BIN" "$RELEASE_DIR/bin/node"
 chown -R root:root "$RELEASE_DIR"
+chmod 0755 "$RELEASE_DIR"
 
 if systemctl is-active --quiet project-board.service; then
   service_was_active=1
