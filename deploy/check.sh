@@ -7,8 +7,10 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 bash -n "$ROOT_DIR/deploy/check.sh" "$ROOT_DIR/deploy/install.sh" \
   "$ROOT_DIR/deploy/backup-offsite.sh" "$ROOT_DIR/deploy/backup-offsite.test.sh" \
-  "$ROOT_DIR/deploy/restore-drill.sh" "$ROOT_DIR/deploy/restore-drill.test.sh"
+  "$ROOT_DIR/deploy/restore-drill.sh" "$ROOT_DIR/deploy/restore-drill.test.sh" \
+  "$ROOT_DIR/deploy/install.test.sh"
 
+bash "$ROOT_DIR/deploy/install.test.sh"
 bash "$ROOT_DIR/deploy/backup-offsite.test.sh"
 bash "$ROOT_DIR/deploy/restore-drill.test.sh"
 
@@ -18,16 +20,22 @@ grep -Fq 'project-board-restore-drill.timer' "$ROOT_DIR/deploy/install.sh"
 CHECK_INSTALL="$ROOT_DIR/deploy/install.sh" node --input-type=module -e '
   import { readFileSync } from "node:fs";
   const script = readFileSync(process.env.CHECK_INSTALL, "utf8");
-  const quote = String.fromCharCode(34);
-  const backup = script.indexOf(`${quote}$ROOT_DIR/deploy/backup.mjs${quote}`);
-  const replace = script.indexOf(`find ${quote}$APP_DIR${quote}`);
+  const backup = script.indexOf("\"$ROOT_DIR/deploy/backup.mjs\"");
+  const stage = script.indexOf("RELEASE_DIR=$(mktemp -d");
+  const preserve = script.indexOf("mv -- \"$APP_DIR\" \"$ROLLBACK_DIR\"");
+  const swap = script.indexOf("mv -- \"$RELEASE_DIR\" \"$APP_DIR\"");
+  const restore = script.indexOf("mv -- \"$ROLLBACK_DIR\" \"$APP_DIR\"");
   if (
-    !script.includes(`if [[ -e ${quote}$DATABASE_PATH${quote} ]]`) ||
+    !script.includes("if [[ -e \"$DATABASE_PATH\" ]]") ||
     backup < 0 ||
-    replace < 0 ||
-    backup > replace
+    stage < 0 ||
+    preserve < 0 ||
+    swap < 0 ||
+    restore < 0 ||
+    backup > stage ||
+    preserve > swap
   ) {
-    throw new Error("install.sh must integrity-backup an existing database before replacing the app");
+    throw new Error("install.sh must back up before staging and atomically preserve/restore the previous release");
   }
 '
 

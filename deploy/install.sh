@@ -16,15 +16,42 @@ CONFIG_DIR=/etc/project-board
 RESTIC_PASSWORD_FILE="$CONFIG_DIR/restic-password"
 RCLONE_CONFIG="$CONFIG_DIR/rclone.conf"
 OFFSITE_ENV="$CONFIG_DIR/project-board-offsite.env"
+APP_PARENT_DIR=$(dirname "$APP_DIR")
 UNIT_DIR=$(mktemp -d)
+RELEASE_DIR=''
+ROLLBACK_DIR=''
+app_swapped=0
 service_was_active=0
 
 cleanup() {
   local status=$?
-  if (( status != 0 && service_was_active == 1 )); then
-    if ! systemctl start project-board.service; then
-      printf 'install failed and the previous project-board service could not be restarted\n' >&2
+  trap - EXIT
+
+  if (( status != 0 )); then
+    if (( app_swapped == 1 )); then
+      systemctl stop project-board.service || true
+      rm -rf -- "$APP_DIR" || true
+      if [[ -n "$ROLLBACK_DIR" ]]; then
+        if ! mv -- "$ROLLBACK_DIR" "$APP_DIR"; then
+          printf 'install failed and the previous project-board release could not be restored\n' >&2
+        else
+          ROLLBACK_DIR=''
+        fi
+      fi
+    elif [[ -n "$ROLLBACK_DIR" ]]; then
+      rm -rf -- "$ROLLBACK_DIR" || true
     fi
+    if (( service_was_active == 1 )); then
+      if ! systemctl start project-board.service; then
+        printf 'install failed and the previous project-board service could not be restarted\n' >&2
+      fi
+    fi
+  elif [[ -n "$ROLLBACK_DIR" ]]; then
+    rm -rf -- "$ROLLBACK_DIR" || true
+  fi
+
+  if [[ -n "$RELEASE_DIR" ]]; then
+    rm -rf -- "$RELEASE_DIR" || true
   fi
   rm -rf -- "$UNIT_DIR" || true
   exit "$status"
@@ -136,17 +163,27 @@ if [[ -e "$DATABASE_PATH" ]]; then
   DATABASE_PATH="$DATABASE_PATH" BACKUP_DIR="$BACKUP_DIR" "$NODE_BIN" "$ROOT_DIR/deploy/backup.mjs"
 fi
 
+install -d -o root -g root -m 0755 "$APP_PARENT_DIR"
+RELEASE_DIR=$(mktemp -d "$APP_PARENT_DIR/.project-board-release.XXXXXX")
+cp -a dist server package.json package-lock.json deploy "$RELEASE_DIR"/
+install -D -o root -g root -m 0755 "$NODE_BIN" "$RELEASE_DIR/bin/node"
+chown -R root:root "$RELEASE_DIR"
+
 if systemctl is-active --quiet project-board.service; then
   service_was_active=1
   systemctl stop project-board.service
 fi
 
-install -d -o root -g root -m 0755 "$APP_DIR"
-find "$APP_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-cp -a dist server package.json package-lock.json deploy "$APP_DIR"/
-install -D -o root -g root -m 0755 "$NODE_BIN" "$NODE_RUNTIME"
+if [[ -e "$APP_DIR" || -L "$APP_DIR" ]]; then
+  ROLLBACK_DIR=$(mktemp -d "$APP_PARENT_DIR/.project-board-rollback.XXXXXX")
+  rmdir -- "$ROLLBACK_DIR"
+  mv -- "$APP_DIR" "$ROLLBACK_DIR"
+  app_swapped=1
+fi
+mv -- "$RELEASE_DIR" "$APP_DIR"
+RELEASE_DIR=''
+app_swapped=1
 install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0750 "$DATA_DIR" "$BACKUP_DIR"
-chown -R root:root "$APP_DIR"
 
 units=(
   project-board.service
