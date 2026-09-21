@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,6 +9,7 @@ import { describe, it } from 'node:test';
 import { createApp } from './app.mjs';
 
 const IDENTITY = 'Cf-Access-Authenticated-User-Email';
+const CREATION_ETAG = '"workspace-missing"';
 
 async function withApp(callback) {
   const root = await mkdtemp(join(tmpdir(), 'project-board-server-'));
@@ -75,6 +77,14 @@ function identity(email) {
   return { [IDENTITY]: email };
 }
 
+function putHeaders(email, etag = CREATION_ETAG) {
+  return { ...identity(email), 'content-type': 'application/json', 'if-match': etag };
+}
+
+function etagFor(document) {
+  return `"${createHash('sha256').update(JSON.stringify(document)).digest('hex')}"`;
+}
+
 describe('authenticated workspace server', () => {
   it('rejects missing and malformed identity headers', async () => {
     await withApp(async (base) => {
@@ -106,6 +116,7 @@ describe('authenticated workspace server', () => {
         headers: identity('Owner@Example.com'),
       });
       assert.equal(response.status, 204);
+      assert.equal(response.headers.get('etag'), CREATION_ETAG);
     });
   });
 
@@ -124,16 +135,128 @@ describe('authenticated workspace server', () => {
       });
       const saved = await request(base, '/api/workspace', {
         method: 'PUT',
-        headers: { ...identity('Owner@Example.com'), 'content-type': 'application/json' },
+        headers: putHeaders('Owner@Example.com'),
         body: JSON.stringify(document),
       });
       assert.equal(saved.status, 204);
+      assert.equal(saved.headers.get('etag'), etagFor(document));
 
       const loaded = await request(base, '/api/workspace', {
         headers: identity(' owner@example.com '),
       });
       assert.equal(loaded.status, 200);
+      assert.equal(loaded.headers.get('etag'), etagFor(document));
       assert.deepEqual(await loaded.json(), document);
+    });
+  });
+
+  it('requires If-Match before accepting a workspace write', async () => {
+    await withApp(async (base) => {
+      const response = await request(base, '/api/workspace', {
+        method: 'PUT',
+        headers: { ...identity('owner@example.com'), 'content-type': 'application/json' },
+        body: JSON.stringify(workspace()),
+      });
+      assert.equal(response.status, 428);
+
+      const loaded = await request(base, '/api/workspace', {
+        headers: identity('owner@example.com'),
+      });
+      assert.equal(loaded.status, 204);
+      assert.equal(loaded.headers.get('etag'), CREATION_ETAG);
+    });
+  });
+
+  it('updates with the matching ETag and returns the next revision', async () => {
+    await withApp(async (base) => {
+      const initial = workspace({ projects: [project()] });
+      const created = await request(base, '/api/workspace', {
+        method: 'PUT',
+        headers: putHeaders('owner@example.com'),
+        body: JSON.stringify(initial),
+      });
+      assert.equal(created.status, 204);
+
+      const current = await request(base, '/api/workspace', {
+        headers: identity('owner@example.com'),
+      });
+      const next = workspace({ projects: [project({ status: 'paused' })] });
+      const updated = await request(base, '/api/workspace', {
+        method: 'PUT',
+        headers: putHeaders('owner@example.com', current.headers.get('etag')),
+        body: JSON.stringify(next),
+      });
+      assert.equal(updated.status, 204);
+      assert.equal(updated.headers.get('etag'), etagFor(next));
+    });
+  });
+
+  it('rejects a stale ETag without changing the stored workspace', async () => {
+    await withApp(async (base) => {
+      const initial = workspace({ projects: [project()] });
+      await request(base, '/api/workspace', {
+        method: 'PUT',
+        headers: putHeaders('owner@example.com'),
+        body: JSON.stringify(initial),
+      });
+      const firstRead = await request(base, '/api/workspace', {
+        headers: identity('owner@example.com'),
+      });
+      const secondRead = await request(base, '/api/workspace', {
+        headers: identity('owner@example.com'),
+      });
+      const winning = workspace({ projects: [project({ status: 'paused' })] });
+      const firstWrite = await request(base, '/api/workspace', {
+        method: 'PUT',
+        headers: putHeaders('owner@example.com', firstRead.headers.get('etag')),
+        body: JSON.stringify(winning),
+      });
+      assert.equal(firstWrite.status, 204);
+
+      const losing = workspace({ projects: [project({ status: 'done' })] });
+      const staleWrite = await request(base, '/api/workspace', {
+        method: 'PUT',
+        headers: putHeaders('owner@example.com', secondRead.headers.get('etag')),
+        body: JSON.stringify(losing),
+      });
+      assert.equal(staleWrite.status, 412);
+
+      const loaded = await request(base, '/api/workspace', {
+        headers: identity('owner@example.com'),
+      });
+      assert.deepEqual(await loaded.json(), winning);
+      assert.equal(loaded.headers.get('etag'), etagFor(winning));
+    });
+  });
+
+  it('does not accept another owner’s revision', async () => {
+    await withApp(async (base) => {
+      const first = workspace({ projects: [project({ id: 'first' })] });
+      const second = workspace({ projects: [project({ id: 'second' })] });
+      await request(base, '/api/workspace', {
+        method: 'PUT',
+        headers: putHeaders('first@example.com'),
+        body: JSON.stringify(first),
+      });
+      await request(base, '/api/workspace', {
+        method: 'PUT',
+        headers: putHeaders('second@example.com'),
+        body: JSON.stringify(second),
+      });
+      const firstRead = await request(base, '/api/workspace', {
+        headers: identity('first@example.com'),
+      });
+      const attempted = await request(base, '/api/workspace', {
+        method: 'PUT',
+        headers: putHeaders('second@example.com', firstRead.headers.get('etag')),
+        body: JSON.stringify(workspace({ projects: [project({ id: 'intruder' })] })),
+      });
+      assert.equal(attempted.status, 412);
+
+      const secondRead = await request(base, '/api/workspace', {
+        headers: identity('second@example.com'),
+      });
+      assert.deepEqual((await secondRead.json()).projects, second.projects);
     });
   });
 
@@ -144,7 +267,7 @@ describe('authenticated workspace server', () => {
       for (const [email, document] of [['first@example.com', first], ['second@example.com', second]]) {
         const response = await request(base, '/api/workspace', {
           method: 'PUT',
-          headers: { ...identity(email), 'content-type': 'application/json' },
+          headers: putHeaders(email),
           body: JSON.stringify(document),
         });
         assert.equal(response.status, 204);
@@ -168,7 +291,7 @@ describe('authenticated workspace server', () => {
       for (const document of cases) {
         const response = await request(base, '/api/workspace', {
           method: 'PUT',
-          headers: { ...identity('owner@example.com'), 'content-type': 'application/json' },
+          headers: putHeaders('owner@example.com'),
           body: JSON.stringify(document),
         });
         assert.equal(response.status, 400);
@@ -193,7 +316,7 @@ describe('authenticated workspace server', () => {
       for (const document of cases) {
         const response = await request(base, '/api/workspace', {
           method: 'PUT',
-          headers: { ...identity('owner@example.com'), 'content-type': 'application/json' },
+          headers: putHeaders('owner@example.com'),
           body: JSON.stringify(document),
         });
         assert.equal(response.status, 400);
@@ -207,7 +330,7 @@ describe('authenticated workspace server', () => {
       assert.ok(Buffer.byteLength(body) > 5 * 1024 * 1024);
       const response = await request(base, '/api/workspace', {
         method: 'PUT',
-        headers: { ...identity('owner@example.com'), 'content-type': 'application/json' },
+        headers: putHeaders('owner@example.com'),
         body,
       });
       assert.equal(response.status, 413);

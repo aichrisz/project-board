@@ -34,9 +34,12 @@ import { createId, slugify } from '../lib/id';
 import { withAutoProgress } from '../lib/progress';
 import { loadStorage, migrateProject, saveStorage } from '../lib/storage';
 import {
+  CREATION_ETAG,
   hydrateRemoteWorkspace,
   queueRemoteWorkspaceSave,
+  WorkspaceConflictError,
   type RemoteWorkspace,
+  type WorkspaceSyncState,
 } from '../lib/remoteWorkspace';
 import { applyTheme } from '../lib/theme';
 import type {
@@ -83,6 +86,7 @@ type ProjectContextValue = {
   activity: ActivityEvent[];
   focus: FocusState;
   ready: boolean;
+  reloadRequired: boolean;
   getProject: (id: string) => Project | undefined;
   createProject: (input: ProjectInput) => Project;
   updateProject: (id: string, patch: Partial<Project>) => void;
@@ -193,7 +197,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [focus, setFocus] = useState<FocusState>(DEFAULT_FOCUS_STATE);
   const [ready, setReady] = useState(false);
   const [remoteReady, setRemoteReady] = useState(false);
+  const [reloadRequired, setReloadRequired] = useState(false);
   const remoteSyncRef = useRef<'loading' | 'ready' | 'failed'>('loading');
+  const remoteRevisionRef = useRef<WorkspaceSyncState>({
+    etag: CREATION_ETAG,
+    blocked: false,
+  });
   const remoteBaselineRef = useRef<string | null>(null);
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
@@ -325,9 +334,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
               })()
             : hydrated.workspace;
         applySnapshot(snapshot);
+        remoteRevisionRef.current = { etag: hydrated.revision, blocked: false };
         remoteBaselineRef.current = workspaceKey(snapshot);
         if (hydrated.shouldSave) {
-          queueRemoteWorkspaceSave(snapshot).catch(() => undefined);
+          queueRemoteWorkspaceSave(snapshot, remoteRevisionRef.current).catch((error: unknown) => {
+            if (error instanceof WorkspaceConflictError) setReloadRequired(true);
+          });
         }
         saveActivity(snapshot.activity);
         remoteSyncRef.current = hydrated.status;
@@ -347,12 +359,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   }, [projects, settings, focus, ready]);
 
   useEffect(() => {
-    if (!ready || !remoteReady || remoteSyncRef.current === 'loading') return;
+    if (!ready || !remoteReady || remoteSyncRef.current !== 'ready') return;
+    if (remoteRevisionRef.current.blocked) return;
     const workspace = makeRemoteWorkspace(projects, settings, focus, activity);
     const key = workspaceKey(workspace);
     if (key === remoteBaselineRef.current) return;
     remoteBaselineRef.current = key;
-    queueRemoteWorkspaceSave(workspace).catch(() => undefined);
+    queueRemoteWorkspaceSave(workspace, remoteRevisionRef.current).catch((error: unknown) => {
+      if (error instanceof WorkspaceConflictError) setReloadRequired(true);
+    });
   }, [activity, focus, projects, remoteReady, ready, settings]);
 
   useEffect(() => {
@@ -971,6 +986,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       activity,
       focus,
       ready,
+      reloadRequired,
       getProject,
       createProject,
       updateProject,
@@ -1002,6 +1018,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       activity,
       focus,
       ready,
+      reloadRequired,
       getProject,
       createProject,
       updateProject,

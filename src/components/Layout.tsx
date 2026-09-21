@@ -25,7 +25,7 @@ function tabClass({ isActive }: { isActive: boolean }) {
 }
 
 export function Layout() {
-  const { exportData, projects, ready } = useProjects();
+  const { exportData, projects, ready, reloadRequired } = useProjects();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuId = useId();
@@ -114,6 +114,12 @@ export function Layout() {
           </button>
         </div>
       </header>
+
+      {reloadRequired && (
+        <p className="banner banner-nudge-inline" role="status">
+          This workspace changed elsewhere. Reload this page to continue saving.
+        </p>
+      )}
 
       {menuOpen && (
         <div

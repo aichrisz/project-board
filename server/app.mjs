@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
+import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { access, readFile, realpath } from 'node:fs/promises';
 import { dirname, extname, resolve, sep } from 'node:path';
@@ -17,6 +18,7 @@ const MAX_ITEMS_PER_PROJECT = 500;
 const MAX_TAGS_PER_PROJECT = 50;
 const MAX_FOCUS_HISTORY = 250;
 const MAX_FOCUS_NOTE_CHARS = 200;
+const WORKSPACE_CREATION_ETAG = '"workspace-missing"';
 const PROJECT_TYPES = new Set(['game', 'web', 'tool', 'learning', 'infra', 'other']);
 const PROJECT_STATUSES = new Set(['idea', 'planned', 'in_progress', 'paused', 'done', 'archived']);
 const ACTIVITY_TYPES = new Set([
@@ -81,6 +83,10 @@ function sendJson(response, status, body) {
 function sendEmpty(response, status) {
   response.statusCode = status;
   response.end();
+}
+
+function workspaceEtag(dataJson) {
+  return `"${createHash('sha256').update(dataJson).digest('hex')}"`;
 }
 
 function isValidString(value, max, allowBlank = false) {
@@ -351,6 +357,23 @@ export function createApp({ databasePath, distDir = resolve('dist') }) {
   const getWorkspace = database.prepare(
     'SELECT data_json FROM workspaces WHERE owner_email = ?',
   );
+  function compareAndPutWorkspace(owner, dataJson, expectedEtag) {
+    database.exec('BEGIN IMMEDIATE');
+    try {
+      const row = getWorkspace.get(owner);
+      const currentEtag = row ? workspaceEtag(row.data_json) : WORKSPACE_CREATION_ETAG;
+      if (currentEtag !== expectedEtag) {
+        database.exec('ROLLBACK');
+        return false;
+      }
+      putWorkspace.run(owner, dataJson, new Date().toISOString());
+      database.exec('COMMIT');
+      return true;
+    } catch (error) {
+      database.exec('ROLLBACK');
+      throw error;
+    }
+  }
   const root = resolve(distDir);
 
   const server = createServer((request, response) => {
@@ -393,13 +416,20 @@ export function createApp({ databasePath, distDir = resolve('dist') }) {
       if (request.method === 'GET') {
         const row = getWorkspace.get(owner);
         if (!row) {
+          response.setHeader('etag', WORKSPACE_CREATION_ETAG);
           sendEmpty(response, 204);
           return;
         }
+        response.setHeader('etag', workspaceEtag(row.data_json));
         sendJson(response, 200, JSON.parse(row.data_json));
         return;
       }
       if (request.method === 'PUT') {
+        const expectedEtag = request.headers['if-match'];
+        if (typeof expectedEtag !== 'string' || expectedEtag.length === 0) {
+          sendJson(response, 428, { error: 'If-Match required' });
+          return;
+        }
         const raw = await readBody(request);
         if (raw === null) {
           sendJson(response, 413, { error: 'request body too large' });
@@ -416,7 +446,12 @@ export function createApp({ databasePath, distDir = resolve('dist') }) {
           sendJson(response, 400, { error: 'invalid workspace' });
           return;
         }
-        putWorkspace.run(owner, JSON.stringify(document), new Date().toISOString());
+        const dataJson = JSON.stringify(document);
+        if (!compareAndPutWorkspace(owner, dataJson, expectedEtag)) {
+          sendEmpty(response, 412);
+          return;
+        }
+        response.setHeader('etag', workspaceEtag(dataJson));
         sendEmpty(response, 204);
         return;
       }
