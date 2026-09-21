@@ -183,6 +183,26 @@ sudo bash deploy/install.sh
 `/var/backups/project-board`. It installs only the local systemd units; Cloudflare
 Tunnel and Access must be configured separately.
 
+## Kei CLI
+
+The dependency-free local CLI talks to the workspace API only; it never opens
+SQLite or stores credentials. Set the owner explicitly with `--owner` or
+`PROJECT_BOARD_OWNER`. The URL defaults to `http://127.0.0.1:8780` and can be
+overridden with `--url` or `PROJECT_BOARD_URL`.
+
+```bash
+export PROJECT_BOARD_OWNER=you@example.com
+node scripts/project-board.mjs list
+node scripts/project-board.mjs add-project --title "Night audit" --type tool --status idea
+node scripts/project-board.mjs set-status PROJECT_ID in_progress
+node scripts/project-board.mjs add-step PROJECT_ID "Check the queue"
+node scripts/project-board.mjs complete-step PROJECT_ID STEP_ID
+node scripts/project-board.mjs inspect PROJECT_ID
+```
+
+Every mutation reads the current workspace and uses its ETag for the write. A
+stale write exits nonzero instead of overwriting newer data.
+
 ## Tests
 
 ```bash
