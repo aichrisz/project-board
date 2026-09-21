@@ -9,6 +9,7 @@ Type=oneshot
 User=project-board
 Group=project-board
 WorkingDirectory=/opt/project-board
+Environment=PATH=/opt/project-board/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 Environment="RESTIC_REPOSITORY=rclone:onedrive:Project Board"
 Environment=RESTIC_PASSWORD_FILE=/etc/project-board/restic-password
 Environment=RCLONE_CONFIG=/var/lib/project-board/rclone/rclone.conf
