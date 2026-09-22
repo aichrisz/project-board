@@ -60,6 +60,17 @@ describe('getNextAction', () => {
     assert.deepEqual(project.steps, source);
   });
 
+  it('uses step id as a tie-breaker without changing the source array', () => {
+    const source = steps(
+      { id: 'b-step', title: 'B step', order: 1 },
+      { id: 'a-step', title: 'A step', order: 1 },
+    );
+    const project = makeProject({ steps: source });
+
+    assert.equal(getNextAction(project)?.id, 'a-step');
+    assert.deepEqual(project.steps, source);
+  });
+
   it('returns no action when every step is finished', () => {
     const project = makeProject({
       steps: steps({ id: 'done', title: 'Done', done: true }),

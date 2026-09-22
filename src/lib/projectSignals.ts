@@ -21,7 +21,7 @@ export function getNextAction(project: Project): Step | null {
   return (
     [...project.steps]
       .filter((step) => !step.done)
-      .sort((a, b) => a.order - b.order)[0] ?? null
+      .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))[0] ?? null
   );
 }
 
