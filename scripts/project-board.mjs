@@ -9,6 +9,7 @@ const CREATION_ETAG = '"workspace-missing"';
 const MAX_ID_CHARS = 200;
 const MAX_TITLE_CHARS = 400;
 const MAX_SUMMARY_CHARS = 2000;
+const MAX_NOTES_CHARS = 200_000;
 const MAX_PROJECTS = 5000;
 const MAX_STEPS = 500;
 const PROJECT_TYPES = new Set(['game', 'web', 'tool', 'learning', 'infra', 'other']);
@@ -204,7 +205,10 @@ function findProject(workspace, id) {
 }
 
 function appendNote(project, note) {
-  project.notes_md = project.notes_md ? `${project.notes_md}\n${note}` : note;
+  const previous = project.notes_md.trimEnd();
+  const next = previous ? `${previous}\n${note}` : note;
+  if (next.length > MAX_NOTES_CHARS) throw new CliError(`notes exceed ${MAX_NOTES_CHARS} characters`);
+  project.notes_md = next;
 }
 
 function requireStatus(value) {
@@ -305,6 +309,7 @@ function setBlocker(workspace, positionals) {
 }
 
 function clearBlocker(workspace, positionals) {
+  if (positionals.length !== 1) throw new CliError('usage: clear-blocker PROJECT_ID');
   const projectId = requireBoundedId(positionals[0], 'project id');
   const project = findProject(workspace, projectId);
   const timestamp = nowIso();

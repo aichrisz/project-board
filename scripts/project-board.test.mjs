@@ -12,6 +12,7 @@ const CLI = join(process.cwd(), 'scripts', 'project-board.mjs');
 const OWNER = 'kei@example.com';
 const IDENTITY = 'Cf-Access-Authenticated-User-Email';
 const CREATION_ETAG = '"workspace-missing"';
+const MAX_NOTES_CHARS = 200_000;
 
 async function withApp(callback) {
   const root = await mkdtemp(join(tmpdir(), 'project-board-cli-'));
@@ -211,6 +212,71 @@ describe('Kei project board CLI', () => {
       const after = await loadWorkspace(url);
       assert.equal(after.etag, before.etag);
       assert.deepEqual(after.workspace, before.workspace);
+    });
+  });
+
+  it('rejects clear-blocker trailing positional arguments before any PUT', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'Clear validation'], url));
+      const before = await loadWorkspace(url);
+
+      await withProxy(url, null, async (proxyUrl, putCount) => {
+        const result = await runCli(['clear-blocker', project.id, 'unexpected'], proxyUrl);
+        assert.notEqual(result.code, 0);
+        assert.match(result.stderr, /usage: clear-blocker PROJECT_ID/i);
+        assert.equal(putCount(), 0);
+      });
+
+      const after = await loadWorkspace(url);
+      assert.equal(after.etag, before.etag);
+      assert.deepEqual(after.workspace, before.workspace);
+    });
+  });
+
+  it('bounds appended notes locally at the server limit before any overflow PUT', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'Notes limit'], url));
+      const suffix = '\nBlocker: x';
+      const current = await loadWorkspace(url);
+      current.workspace.projects[0].notes_md = 'x'.repeat(MAX_NOTES_CHARS - suffix.length);
+      assert.equal((await putWorkspace(url, current.workspace, current.etag)).status, 204);
+
+      await withProxy(url, null, async (proxyUrl, putCount) => {
+        const result = await runCli(['set-blocker', project.id, 'x'], proxyUrl);
+        assert.equal(result.code, 0, result.stderr);
+        assert.equal(putCount(), 1);
+      });
+      const atLimit = await loadWorkspace(url);
+      assert.equal(atLimit.workspace.projects[0].notes_md.length, MAX_NOTES_CHARS);
+      assert.equal(atLimit.workspace.projects[0].notes_md.endsWith('\nBlocker: x'), true);
+
+      const overflow = await loadWorkspace(url);
+      overflow.workspace.projects[0].notes_md = 'x'.repeat(199_999);
+      assert.equal((await putWorkspace(url, overflow.workspace, overflow.etag)).status, 204);
+      const before = await loadWorkspace(url);
+
+      await withProxy(url, null, async (proxyUrl, putCount) => {
+        const result = await runCli(['set-blocker', project.id, 'x'], proxyUrl);
+        assert.notEqual(result.code, 0);
+        assert.match(result.stderr, /notes.*200000/i);
+        assert.equal(putCount(), 0);
+      });
+
+      const after = await loadWorkspace(url);
+      assert.equal(after.etag, before.etag);
+      assert.deepEqual(after.workspace, before.workspace);
+    });
+  });
+
+  it('trims trailing note whitespace before appending while preserving content', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'Trim notes'], url));
+      const current = await loadWorkspace(url);
+      current.workspace.projects[0].notes_md = 'Meaningful prior note \n\n\t';
+      assert.equal((await putWorkspace(url, current.workspace, current.etag)).status, 204);
+
+      const result = json(await runCli(['clear-blocker', project.id], url));
+      assert.equal(result.notes_md, 'Meaningful prior note\nBlocker: none.');
     });
   });
 
