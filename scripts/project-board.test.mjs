@@ -78,7 +78,186 @@ async function putWorkspace(url, workspace, etag) {
   });
 }
 
+async function withProxy(baseUrl, beforePut, callback) {
+  let putCount = 0;
+  const proxy = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    if (request.method === 'PUT') {
+      putCount += 1;
+      if (beforePut) await beforePut();
+    }
+    const upstream = await fetch(`${baseUrl}${request.url}`, {
+      method: request.method,
+      headers: {
+        [IDENTITY]: OWNER,
+        'content-type': request.headers['content-type'] ?? 'application/json',
+        ...(request.headers['if-match'] ? { 'if-match': request.headers['if-match'] } : {}),
+      },
+      body: chunks.length === 0 ? undefined : Buffer.concat(chunks),
+    });
+    response.statusCode = upstream.status;
+    for (const [name, value] of upstream.headers) response.setHeader(name, value);
+    response.end(Buffer.from(await upstream.arrayBuffer()));
+  });
+  proxy.listen(0, '127.0.0.1');
+  await once(proxy, 'listening');
+  const { port } = proxy.address();
+  try {
+    return await callback(`http://127.0.0.1:${port}`, () => putCount);
+  } finally {
+    proxy.close();
+    await once(proxy, 'close');
+  }
+}
+
 describe('Kei project board CLI', () => {
+  it('accepts all project signal commands', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'Signal target'], url));
+      const step = json(await runCli(['add-step', project.id, 'Initial step'], url));
+      for (const args of [
+        ['set-blocker', project.id, 'Waiting', 'on', 'API'],
+        ['clear-blocker', project.id],
+        ['add-milestone', project.id, 'Ship', 'it'],
+        ['set-next', project.id, step.title],
+      ]) {
+        const result = await runCli(args, url);
+        assert.equal(result.code, 0, result.stderr);
+      }
+      const help = json(await runCli(['--help'], url)).help;
+      for (const command of ['set-blocker', 'clear-blocker', 'add-milestone', 'set-next']) {
+        assert.match(help, new RegExp(command));
+      }
+    });
+  });
+
+  it('updates project signals while preserving notes and recording one activity each', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'Signal history'], url));
+      const current = await loadWorkspace(url);
+      const seeded = current.workspace.projects[0];
+      seeded.notes_md = 'Prior note';
+      seeded.steps = [
+        { id: 'z-step', title: 'Later', done: false, order: 2 },
+        { id: 'b-step', title: 'First tie', done: false, order: 1 },
+        { id: 'a-step', title: 'First tie other', done: false, order: 1 },
+        { id: 'done-step', title: 'Done', done: true, order: 0 },
+      ];
+      seeded.progress_pct = 25;
+      assert.equal((await putWorkspace(url, current.workspace, current.etag)).status, 204);
+
+      let expectedNotes = ['Prior note'];
+      const actions = [
+        { args: ['set-blocker', project.id, 'Waiting', 'for', 'API'], note: 'Blocker: Waiting for API' },
+        { args: ['clear-blocker', project.id], note: 'Blocker: none.' },
+        { args: ['add-milestone', project.id, 'Release', 'candidate'], note: null },
+        { args: ['set-next', project.id, 'Do', 'it', 'now'], note: null },
+      ];
+
+      for (const action of actions) {
+        const before = await loadWorkspace(url);
+        const beforeProject = before.workspace.projects[0];
+        const result = json(await runCli(action.args, url));
+        const after = await loadWorkspace(url);
+        const afterProject = after.workspace.projects[0];
+        assert.equal(result.id, project.id);
+        assert.notEqual(afterProject.updated_at, beforeProject.updated_at);
+        assert.equal(after.workspace.activity.length, before.workspace.activity.length + 1);
+        assert.deepEqual(after.workspace.activity.slice(1), before.workspace.activity);
+        assert.equal(after.workspace.activity[0].type, 'project_updated');
+        assert.equal(after.workspace.activity[0].projectId, project.id);
+        assert.ok(after.workspace.activity[0].message.length <= 2000);
+        assert.doesNotMatch(after.workspace.activity[0].message, /[\r\n]/);
+
+        if (action.note) expectedNotes.push(action.note);
+        if (action.args[0] === 'add-milestone') {
+          const milestone = afterProject.notes_md.split('\n').at(-1);
+          assert.match(milestone, /^Milestone \d{4}-\d{2}-\d{2}: Release candidate$/);
+          expectedNotes.push(milestone);
+        }
+        if (action.note || action.args[0] === 'add-milestone') {
+          assert.equal(afterProject.notes_md, expectedNotes.join('\n'));
+        }
+        if (action.args[0] === 'set-next') {
+          assert.deepEqual(afterProject.steps, [
+            { id: 'z-step', title: 'Later', done: false, order: 2 },
+            { id: 'b-step', title: 'First tie', done: false, order: 1 },
+            { id: 'a-step', title: 'Do it now', done: false, order: 1 },
+            { id: 'done-step', title: 'Done', done: true, order: 0 },
+          ]);
+          assert.equal(afterProject.progress_pct, 25);
+        }
+      }
+    });
+  });
+
+  it('rejects set-next without an unfinished step before any PUT', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'Finished target'], url));
+      const current = await loadWorkspace(url);
+      current.workspace.projects[0].steps = [{ id: 'done-step', title: 'Done', done: true, order: 1 }];
+      current.workspace.projects[0].progress_pct = 100;
+      assert.equal((await putWorkspace(url, current.workspace, current.etag)).status, 204);
+      const before = await loadWorkspace(url);
+
+      await withProxy(url, null, async (proxyUrl, putCount) => {
+        const result = await runCli(['set-next', project.id, 'Replacement'], proxyUrl);
+        assert.notEqual(result.code, 0);
+        assert.match(result.stderr, /add-step/i);
+        assert.equal(putCount(), 0);
+      });
+
+      const after = await loadWorkspace(url);
+      assert.equal(after.etag, before.etag);
+      assert.deepEqual(after.workspace, before.workspace);
+    });
+  });
+
+  it('rejects blank and oversized signal text before any PUT', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'Validation target'], url));
+      const before = await loadWorkspace(url);
+      const cases = [
+        { args: ['set-blocker', project.id, '   '], pattern: /blocker text is required/i },
+        { args: ['set-blocker', project.id, 'x'.repeat(2001)], pattern: /blocker text.*2000/i },
+        { args: ['add-milestone', project.id, '   '], pattern: /milestone text is required/i },
+        { args: ['add-milestone', project.id, 'x'.repeat(2001)], pattern: /milestone text.*2000/i },
+        { args: ['set-next', project.id, '   '], pattern: /step title is required/i },
+        { args: ['set-next', project.id, 'x'.repeat(401)], pattern: /step title.*400/i },
+      ];
+
+      for (const { args, pattern } of cases) {
+        await withProxy(url, null, async (proxyUrl, putCount) => {
+          const result = await runCli(args, proxyUrl);
+          assert.notEqual(result.code, 0);
+          assert.match(result.stderr, pattern);
+          assert.equal(putCount(), 0);
+        });
+        const after = await loadWorkspace(url);
+        assert.equal(after.etag, before.etag);
+        assert.deepEqual(after.workspace, before.workspace);
+      }
+    });
+  });
+
+  it('requires an existing project for every project signal command', async () => {
+    await withApp(async (url) => {
+      const commands = [
+        ['set-blocker', 'missing-project', 'reason'],
+        ['clear-blocker', 'missing-project'],
+        ['add-milestone', 'missing-project', 'milestone'],
+        ['set-next', 'missing-project', 'next'],
+      ];
+      for (const args of commands) {
+        const result = await runCli(args, url);
+        assert.notEqual(result.code, 0);
+        assert.match(result.stderr, /project not found: missing-project/);
+      }
+      assert.equal((await loadWorkspace(url)).etag, CREATION_ETAG);
+    });
+  });
+
   it('lists and inspects projects through the workspace API', async () => {
     await withApp(async (url) => {
       assert.deepEqual(json(await runCli(['list'], url)), []);
@@ -158,13 +337,14 @@ describe('Kei project board CLI', () => {
       await once(proxy, 'listening');
       const { port } = proxy.address();
       try {
-        const result = await runCli(['set-status', project.id, 'done'], `http://127.0.0.1:${port}`);
-        assert.notEqual(result.code, 0);
+        const result = await runCli(['set-blocker', project.id, 'losing'], `http://127.0.0.1:${port}`);
+        assert.equal(result.code, 2);
         assert.match(result.stderr, /^conflict: workspace changed elsewhere; reload required\n$/);
 
         const loaded = await loadWorkspace(baseUrl);
         assert.equal(loaded.workspace.projects[0].summary, 'winner');
         assert.equal(loaded.workspace.projects[0].status, 'idea');
+        assert.equal(loaded.workspace.projects[0].notes_md, '');
       } finally {
         proxy.close();
         await once(proxy, 'close');

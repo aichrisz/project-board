@@ -42,6 +42,10 @@ function usage() {
     '  set-status PROJECT_ID STATUS',
     '  add-step PROJECT_ID TITLE',
     '  complete-step PROJECT_ID STEP_ID',
+    '  set-blocker PROJECT_ID TEXT',
+    '  clear-blocker PROJECT_ID',
+    '  add-milestone PROJECT_ID TEXT',
+    '  set-next PROJECT_ID TEXT',
   ].join('\n');
 }
 
@@ -199,6 +203,10 @@ function findProject(workspace, id) {
   return project;
 }
 
+function appendNote(project, note) {
+  project.notes_md = project.notes_md ? `${project.notes_md}\n${note}` : note;
+}
+
 function requireStatus(value) {
   const status = requireText(value, 'status', 32);
   if (!PROJECT_STATUSES.has(status)) throw new CliError(`status must be one of: ${[...PROJECT_STATUSES].join(', ')}`);
@@ -285,6 +293,57 @@ function completeStep(workspace, positionals) {
   return step;
 }
 
+function setBlocker(workspace, positionals) {
+  const projectId = requireBoundedId(positionals[0], 'project id');
+  const text = requireText(positionals.slice(1).join(' '), 'blocker text', MAX_SUMMARY_CHARS);
+  const project = findProject(workspace, projectId);
+  const timestamp = nowIso();
+  appendNote(project, `Blocker: ${text}`);
+  project.updated_at = timestamp;
+  addActivity(workspace, 'project_updated', `Updated blocker for “${project.title}”`, project.id);
+  return project;
+}
+
+function clearBlocker(workspace, positionals) {
+  const projectId = requireBoundedId(positionals[0], 'project id');
+  const project = findProject(workspace, projectId);
+  const timestamp = nowIso();
+  appendNote(project, 'Blocker: none.');
+  project.updated_at = timestamp;
+  addActivity(workspace, 'project_updated', `Cleared blocker for “${project.title}”`, project.id);
+  return project;
+}
+
+function addMilestone(workspace, positionals) {
+  const projectId = requireBoundedId(positionals[0], 'project id');
+  const text = requireText(positionals.slice(1).join(' '), 'milestone text', MAX_SUMMARY_CHARS);
+  const project = findProject(workspace, projectId);
+  const timestamp = nowIso();
+  appendNote(project, `Milestone ${timestamp.slice(0, 10)}: ${text}`);
+  project.updated_at = timestamp;
+  addActivity(workspace, 'project_updated', `Added milestone for “${project.title}”`, project.id);
+  return project;
+}
+
+function setNext(workspace, positionals) {
+  const projectId = requireBoundedId(positionals[0], 'project id');
+  const title = requireText(positionals.slice(1).join(' '), 'step title', MAX_TITLE_CHARS);
+  const project = findProject(workspace, projectId);
+  const step = project.steps
+    .filter((entry) => !entry.done)
+    .sort((left, right) => left.order - right.order || left.id.localeCompare(right.id))[0];
+  if (!step) throw new CliError('no unfinished step; use add-step first');
+
+  const timestamp = nowIso();
+  project.steps = project.steps.map((entry) => (
+    entry.id === step.id ? { ...entry, title } : entry
+  ));
+  project.progress_pct = progress(project.steps);
+  project.updated_at = timestamp;
+  addActivity(workspace, 'project_updated', `Updated next step for “${project.title}”`, project.id);
+  return project;
+}
+
 function commandName(positionals) {
   if (positionals.length === 0) throw new CliError(usage());
   return positionals[0];
@@ -317,6 +376,10 @@ function executeCommand(workspace, positionals, options) {
     const args = command === 'complete-step' ? positionals.slice(1) : positionals.slice(2);
     return completeStep(workspace, args);
   }
+  if (command === 'set-blocker') return setBlocker(workspace, positionals.slice(1));
+  if (command === 'clear-blocker') return clearBlocker(workspace, positionals.slice(1));
+  if (command === 'add-milestone') return addMilestone(workspace, positionals.slice(1));
+  if (command === 'set-next') return setNext(workspace, positionals.slice(1));
   throw new CliError(`unknown command: ${command}`);
 }
 
