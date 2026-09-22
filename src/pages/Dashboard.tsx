@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { DueSoonStrip } from '../components/DueSoonStrip';
 import { EmptyState } from '../components/EmptyState';
+import { FocusProjects } from '../components/FocusProjects';
 import {
   FocusSessionDrawer,
   focusBandLabel,
@@ -450,6 +451,8 @@ export function Dashboard() {
               </button>
             </section>
           )}
+
+          <FocusProjects projects={projects} />
 
           {!isEmptyBoard && (
             <KpiRow stats={stats} showCompleted={showCompleted} />

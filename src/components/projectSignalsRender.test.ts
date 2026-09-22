@@ -129,6 +129,52 @@ describe('project signal component rendering', () => {
   });
 });
 
+describe('focus project rendering', () => {
+  it('renders three focus project links, signals, and review overflow', async () => {
+    const module = await viteServer!.ssrLoadModule('/src/components/FocusProjects.tsx');
+    const FocusProjects = module.FocusProjects as ComponentType<{ projects: Project[] }>;
+    const projects = reviewProjects.map((project, index) => ({
+      ...project,
+      steps: index === 1 ? [] : project.steps,
+      notes_md: index === 0 ? 'Blocker: Waiting on API' : '',
+      updated_at: '2026-01-01T00:00:00.000Z',
+    }));
+    const markup = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(FocusProjects, { projects }),
+      ),
+    );
+
+    assert.match(markup, /<h2[^>]*>Focus<\/h2>/);
+    assert.equal(markup.match(/href="\/project\/[^"]+"/g)?.length, 3);
+    assert.match(markup, /Next action/);
+    assert.match(markup, /Next task/);
+    assert.match(markup, /Waiting on API/);
+    assert.match(markup, /No next action recorded/);
+    assert.match(markup, /No blocker recorded/);
+    assert.match(markup, /Review/);
+    assert.match(markup, /1 more active project/);
+    assert.match(markup, /href="\/review"/);
+  });
+
+  it('renders a board link when there are no active projects', async () => {
+    const module = await viteServer!.ssrLoadModule('/src/components/FocusProjects.tsx');
+    const FocusProjects = module.FocusProjects as ComponentType<{ projects: Project[] }>;
+    const markup = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(FocusProjects, { projects: [makeProject({ status: 'paused' })] }),
+      ),
+    );
+
+    assert.match(markup, /No active projects to focus on/);
+    assert.match(markup, /href="\/board"/);
+  });
+});
+
 describe('mobile project card targets', () => {
   it('keeps both project navigation links at the 44px touch target', () => {
     const css = readFileSync(
@@ -145,5 +191,26 @@ describe('mobile project card targets', () => {
     assert.match(progressLink, /display:\s*flex;/);
     assert.match(progressLink, /align-items:\s*center;/);
     assert.match(progressLink, /min-height:\s*var\(--touch\);/);
+  });
+
+  it('keeps focus cards responsive and links touch-sized', () => {
+    const css = readFileSync(
+      fileURLToPath(new URL('../index.css', import.meta.url)),
+      'utf8',
+    );
+    const focusGrid = css.match(/\.focus-project-grid\s*\{([^}]*)\}/)?.[1] ?? '';
+    const focusCard = css.match(/\.focus-project-card\s*\{([^}]*)\}/)?.[1] ?? '';
+    const focusLink = css.match(/\.focus-project-link\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    assert.match(focusGrid, /grid-template-columns:\s*1fr;/);
+    assert.match(focusGrid, /min-width:\s*0;/);
+    assert.match(focusCard, /min-width:\s*0;/);
+    assert.match(focusLink, /min-height:\s*var\(--touch\);/);
+    assert.match(
+      css,
+      /@media\s*\(min-width:\s*900px\)[\s\S]*?\.focus-project-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/,
+    );
+    assert.doesNotMatch(focusCard, /(?:^|\n)\s*width\s*:/);
+    assert.doesNotMatch(focusLink, /(?:^|\n)\s*width\s*:/);
   });
 });
