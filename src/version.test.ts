@@ -13,7 +13,7 @@ const packageLock = require('../package-lock.json') as {
 
 describe('application version', () => {
   it('keeps runtime and package metadata synchronized', () => {
-    assert.equal(APP_VERSION, '0.12.0');
+    assert.equal(APP_VERSION, '0.13.0');
     assert.equal(packageJson.version, APP_VERSION);
     assert.equal(packageLock.version, APP_VERSION);
     assert.equal(packageLock.packages[''].version, APP_VERSION);

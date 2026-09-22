@@ -2,6 +2,30 @@
 
 All notable changes to Project Board. Local-first single-owner app; dates are UTC.
 
+## 0.13.0 — Conflict-safe project signals (2026-09-22)
+
+### Added
+
+- **Project signal commands.** The dependency-free Kei CLI adds `set-blocker`,
+  `clear-blocker`, `add-milestone`, and `set-next`. The first two append
+  `Blocker:` notes, milestones append a UTC-date note, and `set-next` renames
+  the first unfinished step; use `add-step` first when no unfinished step
+  exists.
+- **Validated activity updates.** These four commands validate project ids and
+  bounded text before mutation and emit a `project_updated` activity event.
+- **Conflict safety.** Every CLI mutation reads the current ETag and sends it
+  in `If-Match`; a stale workspace is rejected instead of overwritten.
+
+### Changed
+
+- Release metadata, version chrome, README, changelog, and portable feature
+  spec identify **v0.13.0**.
+
+### Unchanged
+
+- The workspace and export document schema remains `version: 1`; no dependency,
+  storage key, route, credential, or secret-handling change was introduced.
+
 ## 0.12.0 — Focus Dashboard & durable workspace (2026-09-22)
 
 ### Added

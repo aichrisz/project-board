@@ -4,7 +4,7 @@ A **local-first** personal project inventory dashboard. Track status, progress, 
 
 - **Product name:** Project Board  
 - **Stack:** Vite + React + TypeScript  
-- **Version:** 0.12.0
+- **Version:** 0.13.0
 - **Storage:** authenticated-owner SQLite workspace with browser `localStorage` offline cache
 - **UI language:** English  
 
@@ -100,8 +100,9 @@ app.
   analytics, notification, or network behavior. Focus is optional in the existing
   `version: 1` `project-board-v1` storage/export shape.
 
-The current visible footer, package metadata, and lockfile are synchronized at
-**v0.12.0**; this section records the v0.11 Focus Session feature set.
+At the v0.12 release, the visible footer, package metadata, and lockfile were
+synchronized at **v0.12.0**; this section records the v0.11 Focus Session
+feature set.
 
 ## Features (v0.8 “Steady”)
 
@@ -230,25 +231,29 @@ checks SQLite integrity, owner, and expected 31-project inventory, then removes
 the successful restore. Failed staging is retained for diagnosis and should be
 removed after the incident is resolved.
 
-## Kei CLI
+## Kei CLI (v0.13)
 
 The dependency-free local CLI talks to the workspace API only; it never opens
-SQLite or stores credentials. Set the owner explicitly with `--owner` or
-`PROJECT_BOARD_OWNER`. The URL defaults to `http://127.0.0.1:8780` and can be
-overridden with `--url` or `PROJECT_BOARD_URL`.
+SQLite or stores credentials. The URL defaults to `http://127.0.0.1:8780` and
+can be overridden with `--url` or `PROJECT_BOARD_URL`. The owner is required;
+pass it with `--owner` or `PROJECT_BOARD_OWNER`.
 
 ```bash
-export PROJECT_BOARD_OWNER=you@example.com
-node scripts/project-board.mjs list
-node scripts/project-board.mjs add-project --title "Night audit" --type tool --status idea
-node scripts/project-board.mjs set-status PROJECT_ID in_progress
-node scripts/project-board.mjs add-step PROJECT_ID "Check the queue"
-node scripts/project-board.mjs complete-step PROJECT_ID STEP_ID
-node scripts/project-board.mjs inspect PROJECT_ID
+node scripts/project-board.mjs --owner aichriszme@gmail.com list
+node scripts/project-board.mjs --owner aichriszme@gmail.com add-project --title "Night audit" --type tool --status idea
+node scripts/project-board.mjs --owner aichriszme@gmail.com add-step PROJECT_ID "Check the queue"
+node scripts/project-board.mjs --owner aichriszme@gmail.com set-blocker PROJECT_ID "Waiting for API"
+node scripts/project-board.mjs --owner aichriszme@gmail.com clear-blocker PROJECT_ID
+node scripts/project-board.mjs --owner aichriszme@gmail.com add-milestone PROJECT_ID "Ship it"
+node scripts/project-board.mjs --owner aichriszme@gmail.com set-next PROJECT_ID "Check the queue"
+node scripts/project-board.mjs --owner aichriszme@gmail.com inspect PROJECT_ID
 ```
 
-Every mutation reads the current workspace and uses its ETag for the write. A
-stale write exits nonzero instead of overwriting newer data.
+`set-blocker` and `clear-blocker` append `Blocker:` notes; `add-milestone`
+appends a dated milestone note; and `set-next` renames the first unfinished
+step. If there is no unfinished step, use `add-step` first. Every mutation
+reads the current workspace and uses its ETag in `If-Match`; a stale write
+exits nonzero instead of overwriting newer data.
 
 ## Tests
 
