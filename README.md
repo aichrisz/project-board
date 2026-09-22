@@ -18,7 +18,7 @@ A **local-first** personal project inventory dashboard. Track status, progress, 
 - **Measured contrast floors** — final tokens target at least 4.5:1 for body text and 3:1 for UI borders. The tightest checked pairings are dark danger-on-hover at 4.72:1, light warning-on-sunken at 4.53:1, and light muted-on-sunken at 4.56:1
 - **Responsive and accessible** — touch targets remain at least 44px, focus rings, reduced motion, forced colors, print styles, both themes, and the existing mobile Board overflow affordance are preserved
 - **No new dependencies** — the redesign is presentation-only; storage keys and schemas, routes, import/export, shortcuts, Board keyboard behavior, dialogs, and PWA behavior remain unchanged
-- **Version chrome** — footer shows **v0.10.0**
+- **Version chrome at that release** — the v0.10 footer showed **v0.10.0**
 
 ## Focus Dashboard & durable workspace (v0.12)
 
