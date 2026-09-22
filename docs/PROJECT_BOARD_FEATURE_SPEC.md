@@ -3,9 +3,9 @@
 **Document type:** Portable product specification  
 **Audience:** Any AI or engineer implementing, reviewing, or extending the app  
 **Product name:** Project Board  
-**Current documented version:** 0.11.0 (Focus Session)\
-**Current shipped capability:** all features through **v0.11.0**; visible runtime version chrome and package metadata are synchronized at **v0.11.0**\
-**Last updated:** 2026-08-03
+**Current documented version:** 0.12.0 (Focus Dashboard & durable workspace)\
+**Current shipped capability:** all features through **v0.12.0**; visible runtime version chrome and package metadata are synchronized at **v0.12.0**\
+**Last updated:** 2026-09-22
 
 This document is **self-contained**. It describes *what the product is* and *what features exist*. It does **not** depend on a specific host, owner name, or agent toolchain.
 
@@ -21,8 +21,8 @@ This document is **self-contained**. It describes *what the product is* and *wha
 
 | Principle | Meaning |
 |-----------|---------|
-| Local-first | Primary store is browser `localStorage` (key: `project-board-v1`) |
-| Single-user | No auth, no multiplayer, no real-time collab |
+| Local-first | Browser `localStorage` remains the offline cache; authenticated deployment persists the workspace in SQLite (document version `1`) |
+| Single-owner | Cloudflare Access authenticates the owner and isolates one workspace per owner; no multiplayer or real-time collaboration |
 | Generic branding | UI product name is **Project Board** only (no personal name in chrome) |
 | UI language | **English only** (v1) |
 | Completed items | `done` / `archived` are **hidden by default**; reveal via “Show completed” |
@@ -32,7 +32,7 @@ This document is **self-contained**. It describes *what the product is* and *wha
 | Export safety net | JSON export/import so clearing storage is recoverable |
 
 **Explicitly out of scope (unless product decisions change):**  
-cloud sync, login, multi-board workspaces, GitHub Issues sync, i18n, multi-user permissions, backend API.
+multi-user real-time collaboration, multi-board workspaces, GitHub Issues sync, i18n, and role-based permissions.
 
 ---
 
@@ -44,9 +44,9 @@ cloud sync, login, multi-board workspaces, GitHub Issues sync, i18n, multi-user 
 | UI | React 19 + TypeScript |
 | Routing | react-router (the `react-router-dom` compatibility package was removed upstream in v8) |
 | Lint | oxlint (optional in CI) |
-| Persist | `localStorage` blob version `1` |
+| Persist | Authenticated-owner SQLite workspace with browser `localStorage` offline cache; document version `1` |
 | PWA | Lite: web manifest + minimal service worker (production) |
-| Deploy | Static only. `npm run build:pages`, then publish the contents of `dist/` to the root of the `gh-pages` branch. Vite copies tracked `public/.nojekyll` to `dist/.nojekyll`; publish it with the other artifacts. `dist/404.html` is the SPA fallback. Under legacy GitHub Pages a direct deep link returns HTTP 404 while the fallback app body is served, so the route still renders. No CI deploy workflow, no server, no backend. |
+| Deploy | Authenticated Node server serves the built app from loopback; Cloudflare Access provides the owner identity. GitHub Pages remains a static manual publish path via `npm run build:pages` and the `gh-pages` root. |
 
 **Typical local commands:**
 
@@ -113,6 +113,10 @@ Capped log (~100): project created/deleted, status change, step toggle, import, 
 ```
 
 Activity may be stored separately or alongside depending on implementation; projects + settings are the canonical export payload.
+
+In the authenticated deployment, this version `1` document is persisted in the
+owner's SQLite workspace row. Browser `localStorage` is the offline cache, and
+workspace API writes use ETag / `If-Match` optimistic concurrency.
 
 ### 4.6 Focus Session
 
@@ -189,7 +193,7 @@ grades, or recommendations.
 ## 6. Feature inventory by version
 
 Use this as a capability checklist. Versions are incremental; **current documented
-ship = all rows through 0.11.0**. Version 0.8.2 added no product features
+ship = all rows through 0.12.0**. Version 0.8.2 added no product features
 (documentation and release metadata only).
 
 ### 6.1 v0.1 — MVP
@@ -274,7 +278,7 @@ ship = all rows through 0.11.0**. Version 0.8.2 added no product features
 4. **Additive migration preserved** — valid v1 exports still parse; missing `starred` / `started_at` still default safely
 5. **Regression tests** — dependency-free `node:test` suite covering the import boundary and a guard against known router advisory ranges
 
-### 6.10 v0.9 — Accessibility & mobile field use (current shipped capability)
+### 6.10 v0.9 — Accessibility & mobile field use
 
 1. **Shared modal focus lifecycle** — one primitive (`useDialogFocus`) drives both
    the mobile menu sheet and the `?` shortcuts dialog: focus moves into the
@@ -311,7 +315,7 @@ migration, backend, telemetry, cloud sync, or GitHub Pages strategy change;
 desktop Board layout, drag-to-change-status, and the Board's intentional internal
 horizontal scroll behavior are preserved.
 
-### 6.11 v0.11 — Focus Session (current documented capability)
+### 6.11 v0.11 — Focus Session
 
 1. **Global sessions and presets** — Dashboard and Project Detail start one
    global session using 15, 25, 45, or 60 minutes (25 by default), optionally
@@ -358,13 +362,38 @@ horizontal scroll behavior are preserved.
    aggregate are informational rather than scores, streaks, grades, or
    recommendations.
 
-**Version boundary:** this feature is documented as v0.11.0, but visible runtime
-version chrome remains v0.10.0. `package.json`, `package-lock.json`, and
-`src/version.ts` are intentionally untouched; version chrome work is deferred
-because the existing lockfile root metadata already drifts from `package.json`.
-No new dependency, storage key, route, keyboard shortcut, telemetry, analytics,
+**Version boundary:** v0.11.0 describes the Focus Session feature set. The
+current v0.12.0 release metadata is documented below; application semver and
+the existing workspace document schema version `1` remain independent. No new
+dependency, storage key, route, keyboard shortcut, telemetry, analytics,
 notification, or network behavior was added. The existing v0.9 accessibility and
 v0.10 visual contracts remain in force.
+
+### 6.12 v0.12 — Focus Dashboard & durable workspace
+
+1. **Focus Dashboard** — the Dashboard shows up to three `in_progress` projects
+   in deterministic updated-date order. Each card shows the first unfinished
+   step, the latest non-empty `Blocker:` note, and the existing freshness signal;
+   an overflow link leads to Review, and an empty state links to the Board.
+2. **Persistent authenticated workspace** — the production Node server stores a
+   version `1` workspace document in SQLite per authenticated owner. Browser
+   `localStorage` remains the offline cache and JSON import/export remains
+   available.
+3. **Cloudflare Access isolation** — Cloudflare Access supplies the authenticated
+   owner identity; the server normalizes that identity and reads or writes only
+   the matching owner row.
+4. **Optimistic concurrency** — workspace `GET` returns an ETag and `PUT`
+   requires a matching `If-Match`; missing or stale preconditions are rejected
+   without overwriting newer workspace data.
+5. **Conflict-safe CLI** — the dependency-free Kei CLI reads the current
+   workspace and ETag for each mutation and exits nonzero on a conflict.
+6. **Encrypted recovery** — Restic snapshots use the encrypted OneDrive remote;
+   the restore drill verifies SQLite integrity, owner identity, and expected
+   project inventory before removing the temporary restore.
+7. **Release metadata** — `package.json`, both root package versions in
+   `package-lock.json`, `src/version.ts`, README, changelog, and this portable
+   spec identify the shipped release as v0.12.0. The workspace schema remains
+   version `1`.
 
 ---
 
@@ -434,7 +463,7 @@ src/
 
 ## 10. Acceptance / verify checklist (current product)
 
-An implementation is “feature-complete for 0.11” if:
+An implementation is “feature-complete for 0.12” if:
 
 - [ ] `npm run build` succeeds  
 - [ ] Create/edit/delete project works and survives reload  
@@ -447,7 +476,7 @@ An implementation is “feature-complete for 0.11” if:
 - [ ] Focus chip + URL work  
 - [ ] Duplicate creates idea copy with unchecked steps  
 - [ ] Link chips safe for http(s) / path-like  
-- [x] Footer/chrome and package metadata are synchronized at **v0.11.0**
+- [x] Footer/chrome and package metadata are synchronized at **v0.12.0**
 - [ ] Import rejects malformed, unsafe, or oversized files with a plain-language message
 - [ ] `/review` weekly review works  
 - [ ] Board keyboard status/focus works, and an owned key at a boundary neither scrolls the page nor opens the card
@@ -473,7 +502,7 @@ Possible later themes (only if product owner approves a plan):
 - Stronger a11y on kanban (keyboard move columns)  
 - Portfolio / screenshot mode  
 - Automated deploy workflow (today Pages publishing is a manual `gh-pages` root update)
-- Still **not** default: cloud multi-user, multi-board, i18n  
+- Still **not** default: multi-user real-time collaboration, multi-board, i18n
 
 ---
 
@@ -481,7 +510,7 @@ Possible later themes (only if product owner approves a plan):
 
 1. Treat **§2 principles** as hard constraints.  
 2. Treat **§6** as the feature backlog already shipped (do not re-propose v0.1–v0.5 as “new” unless fixing bugs).  
-3. For new work: propose a **post-v0.11 plan** against gaps only; keep local-first.
+3. For new work: propose a **post-v0.12 plan** against gaps only; keep the offline cache and authenticated owner workspace aligned.
 4. Prefer small, versioned increments with verify via `npm run build` + manual smoke of routes above.  
 5. Keep UI English and product name **Project Board**.  
 
@@ -500,4 +529,4 @@ Possible later themes (only if product owner approves a plan):
 
 ---
 
-*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.11.0.*
+*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.12.0.*

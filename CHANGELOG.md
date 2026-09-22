@@ -1,6 +1,16 @@
 # Changelog
 
-All notable changes to Project Board. Local-first single-user app; dates are UTC.
+All notable changes to Project Board. Local-first single-owner app; dates are UTC.
+
+## 0.12.0 — Focus Dashboard & durable workspace (2026-09-22)
+
+### Added
+
+- **Focus Dashboard.** The Dashboard now surfaces up to three active projects with their next action, blocker, and freshness, with an honest overflow link to Review.
+- **Persistent authenticated SQLite workspace.** The production workspace is stored per authenticated owner, with Cloudflare Access isolation keeping owner workspaces separate from the browser's offline cache.
+- **Optimistic concurrency.** Workspace reads return an ETag and writes require a matching `If-Match`, so stale updates are rejected instead of overwriting newer data.
+- **Conflict-safe CLI.** The dependency-free Kei CLI reads the current workspace and ETag for every mutation and exits nonzero on a conflict.
+- **Encrypted OneDrive recovery.** Restic snapshots use the encrypted OneDrive repository, and the verified restore drill checks SQLite integrity, owner identity, and expected inventory before cleanup.
 
 ## 0.11.0 — Focus Session (2026-08-03)
 

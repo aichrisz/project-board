@@ -4,7 +4,7 @@ A **local-first** personal project inventory dashboard. Track status, progress, 
 
 - **Product name:** Project Board  
 - **Stack:** Vite + React + TypeScript  
-- **Version:** 0.11.0
+- **Version:** 0.12.0
 - **Storage:** authenticated-owner SQLite workspace with browser `localStorage` offline cache
 - **UI language:** English  
 
@@ -19,6 +19,20 @@ A **local-first** personal project inventory dashboard. Track status, progress, 
 - **Responsive and accessible** — touch targets remain at least 44px, focus rings, reduced motion, forced colors, print styles, both themes, and the existing mobile Board overflow affordance are preserved
 - **No new dependencies** — the redesign is presentation-only; storage keys and schemas, routes, import/export, shortcuts, Board keyboard behavior, dialogs, and PWA behavior remain unchanged
 - **Version chrome** — footer shows **v0.10.0**
+
+## Focus Dashboard & durable workspace (v0.12)
+
+The Dashboard Focus section surfaces up to three active projects with each
+project's next action, latest blocker note, and freshness signal. When more
+active projects exist, the section links to Review instead of hiding them.
+
+The production app stores a persistent SQLite workspace per authenticated
+owner. Cloudflare Access supplies the owner identity and keeps workspaces
+isolated; the browser `localStorage` copy remains an offline cache. Workspace
+reads and writes use ETag / `If-Match` optimistic concurrency, and the
+dependency-free Kei CLI refuses stale mutations rather than overwriting newer
+data. Encrypted Restic snapshots use the OneDrive remote, with a verified
+restore drill checking SQLite integrity, owner identity, and expected inventory.
 
 The v0.9 accessibility contracts remain in force: the mobile menu and `?` dialog
 retain their shared focus lifecycle, Board-owned keys are claimed before action
@@ -40,7 +54,7 @@ non-focusable, session-only, and never persisted.
 - **Router advisory** — `react-router` 8.3.0; `npm audit` reports 0 vulnerabilities. See `docs/DEPENDENCY_NOTES.md` for the evidence trail
 - **Version chrome** — footer shows **v0.8.1**
 
-## Focus Session (v0.11 documentation)
+## Focus Session (v0.11)
 
 Focus Session is a single global, local-first timer available from Dashboard and
 Project Detail. Choose 15, 25, 45, or 60 minutes (25 by default), with an
@@ -86,7 +100,8 @@ app.
   analytics, notification, or network behavior. Focus is optional in the existing
   `version: 1` `project-board-v1` storage/export shape.
 
-The visible footer, package metadata, and lockfile are synchronized at **v0.11.0**.
+The current visible footer, package metadata, and lockfile are synchronized at
+**v0.12.0**; this section records the v0.11 Focus Session feature set.
 
 ## Features (v0.8 “Steady”)
 
@@ -169,8 +184,9 @@ npm run preview -- --host 127.0.0.1 --port 8780
 ## Authenticated VPS deployment
 
 The production server stores one workspace per authenticated owner in SQLite and
-serves the built app from loopback. The browser `localStorage` data remains an
-offline cache and the existing JSON import/export remains available.
+serves the built app from loopback. Cloudflare Access supplies the authenticated
+owner identity and isolates workspaces. The browser `localStorage` data remains
+an offline cache and the existing JSON import/export remains available.
 
 ```bash
 bash deploy/check.sh
