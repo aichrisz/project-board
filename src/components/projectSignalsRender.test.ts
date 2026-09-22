@@ -151,10 +151,16 @@ describe('focus project rendering', () => {
     assert.equal(markup.match(/href="\/project\/[^"]+"/g)?.length, 3);
     assert.match(markup, /Next action/);
     assert.match(markup, /Next task/);
-    assert.match(markup, /Waiting on API/);
+    assert.match(
+      markup,
+      /<div class="focus-project-signal"><span class="focus-project-signal-label">Blocker<\/span><span class="focus-project-signal-value">Waiting on API<\/span><\/div>/,
+    );
     assert.match(markup, /No next action recorded/);
     assert.match(markup, /No blocker recorded/);
-    assert.match(markup, /Review/);
+    assert.match(
+      markup,
+      /<div class="focus-project-signal"><span class="focus-project-signal-label">Freshness<\/span><span class="focus-project-signal-value">Review<\/span><\/div>/,
+    );
     assert.match(markup, /1 more active project/);
     assert.match(markup, /href="\/review"/);
   });
