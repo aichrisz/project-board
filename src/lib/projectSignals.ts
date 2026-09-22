@@ -25,6 +25,38 @@ export function getNextAction(project: Project): Step | null {
   );
 }
 
+export function getBlocker(project: Project): string | null {
+  for (const line of project.notes_md.split(/\r?\n/).reverse()) {
+    const match = line.match(/^blocker:(.*)$/i);
+    const value = match?.[1].trim();
+    if (value) return value;
+  }
+
+  return null;
+}
+
+export function getFocusProjects(projects: Project[]): {
+  projects: Project[];
+  total: number;
+} {
+  const activeProjects = projects.filter((project) => project.status === 'in_progress');
+  const sortedProjects = [...activeProjects].sort((a, b) => {
+    const aUpdated = new Date(a.updated_at).getTime();
+    const bUpdated = new Date(b.updated_at).getTime();
+    const aInvalid = Number.isNaN(aUpdated);
+    const bInvalid = Number.isNaN(bUpdated);
+
+    if (aInvalid !== bInvalid) return aInvalid ? 1 : -1;
+    if (!aInvalid && aUpdated !== bUpdated) return bUpdated - aUpdated;
+    return a.id.localeCompare(b.id);
+  });
+
+  return {
+    projects: sortedProjects.slice(0, IDEAL_ACTIVE_PROJECTS),
+    total: activeProjects.length,
+  };
+}
+
 export function getFreshness(project: Project, now = new Date()): Freshness | null {
   if (isTerminal(project.status)) return null;
 

@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Project, Step } from '../types';
 import {
+  IDEAL_ACTIVE_PROJECTS,
   getActiveProjectAdvisory,
+  getBlocker,
   getFreshness,
+  getFocusProjects,
   getNextAction,
 } from './projectSignals';
 
@@ -153,5 +156,85 @@ describe('getActiveProjectAdvisory', () => {
       message:
         '4 projects in progress. Consider continuing, pausing, or finishing one project.',
     });
+  });
+});
+
+describe('getBlocker', () => {
+  it('returns the latest non-empty blocker line case-insensitively', () => {
+    const project = makeProject({
+      notes_md: 'Blocker: first blocker\nBLOCKER:   \nblocker: latest blocker  \nBLOCKER:',
+    });
+
+    assert.equal(getBlocker(project), 'latest blocker');
+  });
+
+  it('returns null when no non-empty blocker line exists', () => {
+    const project = makeProject({
+      notes_md: 'Summary: clear\nBlocker:\nBLOCKER:   ',
+    });
+
+    assert.equal(getBlocker(project), null);
+  });
+});
+
+describe('getFocusProjects', () => {
+  it('keeps only projects in progress', () => {
+    const projects = [
+      makeProject({ id: 'active', status: 'in_progress' }),
+      makeProject({ id: 'paused', status: 'paused' }),
+      makeProject({ id: 'done', status: 'done' }),
+    ];
+
+    assert.deepEqual(
+      getFocusProjects(projects),
+      { projects: [projects[0]], total: 1 },
+    );
+  });
+
+  it('orders valid updated_at values newest first with id tie-breaks', () => {
+    const projects = [
+      makeProject({ id: 'old', updated_at: '2026-09-19T00:00:00.000Z' }),
+      makeProject({ id: 'tie-b', updated_at: '2026-09-20T00:00:00.000Z' }),
+      makeProject({ id: 'new', updated_at: '2026-09-21T00:00:00.000Z' }),
+      makeProject({ id: 'tie-a', updated_at: '2026-09-20T00:00:00.000Z' }),
+    ];
+
+    assert.deepEqual(
+      getFocusProjects(projects).projects.map((project) => project.id),
+      ['new', 'tie-a', 'tie-b'],
+    );
+  });
+
+  it('places invalid dates last and orders invalid dates by id', () => {
+    const projects = [
+      makeProject({ id: 'invalid-z', updated_at: 'not-a-date' }),
+      makeProject({ id: 'valid', updated_at: '2026-09-21T00:00:00.000Z' }),
+      makeProject({ id: 'invalid-a', updated_at: '' }),
+    ];
+
+    assert.deepEqual(
+      getFocusProjects(projects).projects.map((project) => project.id),
+      ['valid', 'invalid-a', 'invalid-z'],
+    );
+  });
+
+  it('caps returned projects at the ideal maximum without mutating the source', () => {
+    const projects = Array.from({ length: IDEAL_ACTIVE_PROJECTS + 1 }, (_, index) =>
+      makeProject({
+        id: `p${index}`,
+        updated_at: `2026-09-${String(21 - index).padStart(2, '0')}T00:00:00.000Z`,
+      }),
+    );
+    const original = structuredClone(projects);
+
+    const focus = getFocusProjects(projects);
+
+    assert.equal(focus.total, IDEAL_ACTIVE_PROJECTS + 1);
+    assert.equal(focus.projects.length, IDEAL_ACTIVE_PROJECTS);
+    assert.deepEqual(
+      focus.projects.map((project) => project.id),
+      ['p0', 'p1', 'p2'],
+    );
+    assert.deepEqual(projects, original);
   });
 });
