@@ -168,6 +168,22 @@ describe('getBlocker', () => {
     assert.equal(getBlocker(project), 'latest blocker');
   });
 
+  it('treats the latest case-insensitive none sentinel as a cleared blocker', () => {
+    const project = makeProject({
+      notes_md: 'Blocker: Waiting for API\nBLOCKER: NONE',
+    });
+
+    assert.equal(getBlocker(project), null);
+  });
+
+  it('treats the latest case-insensitive none period sentinel as a cleared blocker', () => {
+    const project = makeProject({
+      notes_md: 'Blocker: Waiting for API\nblocker: none.',
+    });
+
+    assert.equal(getBlocker(project), null);
+  });
+
   it('returns null when no non-empty blocker line exists', () => {
     const project = makeProject({
       notes_md: 'Summary: clear\nBlocker:\nBLOCKER:   ',

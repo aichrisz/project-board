@@ -29,6 +29,8 @@ export function getBlocker(project: Project): string | null {
   for (const line of project.notes_md.split(/\r?\n/).reverse()) {
     const match = line.match(/^blocker:(.*)$/i);
     const value = match?.[1].trim();
+    const normalized = value?.toLowerCase().replace(/\.$/, '');
+    if (normalized === 'none') return null;
     if (value) return value;
   }
 
