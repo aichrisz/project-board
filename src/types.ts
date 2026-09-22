@@ -20,6 +20,7 @@ export type ThemeMode = 'dark' | 'light' | 'system';
 
 export type ActivityType =
   | 'project_created'
+  | 'project_updated'
   | 'status_changed'
   | 'step_toggled'
   | 'focus_session'

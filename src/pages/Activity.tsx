@@ -6,6 +6,7 @@ import type { ActivityType } from '../types';
 
 const TYPE_LABELS: Record<ActivityType, string> = {
   project_created: 'Created',
+  project_updated: 'Updated',
   status_changed: 'Status',
   step_toggled: 'Step',
   focus_session: 'Focus',

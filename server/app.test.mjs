@@ -150,6 +150,26 @@ describe('authenticated workspace server', () => {
     });
   });
 
+  it('accepts a project_updated activity event in a valid workspace write', async () => {
+    await withApp(async (base) => {
+      const document = workspace({
+        activity: [{
+          id: 'a1',
+          at: '2026-01-03T00:00:00.000Z',
+          type: 'project_updated',
+          projectId: 'p1',
+          message: 'updated',
+        }],
+      });
+      const response = await request(base, '/api/workspace', {
+        method: 'PUT',
+        headers: putHeaders('owner@example.com'),
+        body: JSON.stringify(document),
+      });
+      assert.equal(response.status, 204);
+    });
+  });
+
   it('requires If-Match before accepting a workspace write', async () => {
     await withApp(async (base) => {
       const response = await request(base, '/api/workspace', {

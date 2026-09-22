@@ -23,6 +23,7 @@ const PROJECT_TYPES = new Set(['game', 'web', 'tool', 'learning', 'infra', 'othe
 const PROJECT_STATUSES = new Set(['idea', 'planned', 'in_progress', 'paused', 'done', 'archived']);
 const ACTIVITY_TYPES = new Set([
   'project_created',
+  'project_updated',
   'status_changed',
   'step_toggled',
   'focus_session',

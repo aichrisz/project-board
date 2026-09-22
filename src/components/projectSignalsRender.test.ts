@@ -10,6 +10,7 @@ import type { Project } from '../types';
 
 const REVIEW_CONTEXT_MOCK_ID = '\u0000project-board-review-context-mock';
 const DASHBOARD_CONTEXT_MOCK_ID = '\u0000project-board-dashboard-context-mock';
+const ACTIVITY_CONTEXT_MOCK_ID = '\u0000project-board-activity-context-mock';
 
 function makeProject(overrides: Partial<Project> = {}): Project {
   return {
@@ -69,6 +70,20 @@ const dashboardContextSource = `
   }
 `;
 
+const activityContextSource = `
+  export function useProjects() {
+    return {
+      activity: [{
+        id: 'a1',
+        at: '2026-01-03T00:00:00.000Z',
+        type: 'project_updated',
+        message: 'updated',
+      }],
+      ready: true,
+    };
+  }
+`;
+
 let viteServer: ViteDevServer | undefined;
 
 before(async () => {
@@ -95,11 +110,18 @@ before(async () => {
           ) {
             return DASHBOARD_CONTEXT_MOCK_ID;
           }
+          if (
+            source === '../store/ProjectContext' &&
+            importer?.endsWith('/src/pages/Activity.tsx')
+          ) {
+            return ACTIVITY_CONTEXT_MOCK_ID;
+          }
           return undefined;
         },
         load(id) {
           if (id === REVIEW_CONTEXT_MOCK_ID) return reviewContextSource;
           if (id === DASHBOARD_CONTEXT_MOCK_ID) return dashboardContextSource;
+          if (id === ACTIVITY_CONTEXT_MOCK_ID) return activityContextSource;
           return undefined;
         },
       },
@@ -154,6 +176,18 @@ describe('project signal component rendering', () => {
       markup,
       /4 projects in progress\. Consider continuing, pausing, or finishing one project\./,
     );
+  });
+});
+
+describe('activity rendering', () => {
+  it('renders project_updated as Updated', async () => {
+    const module = await viteServer!.ssrLoadModule('/src/pages/Activity.tsx');
+    const Activity = module.Activity as ComponentType;
+    const markup = renderToStaticMarkup(
+      createElement(MemoryRouter, null, createElement(Activity)),
+    );
+
+    assert.ok(markup.includes('class="activity-type activity-type-project_updated">Updated</span>'));
   });
 });
 
