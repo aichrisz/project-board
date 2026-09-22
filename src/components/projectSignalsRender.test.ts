@@ -9,6 +9,7 @@ import { createServer, type ViteDevServer } from 'vite';
 import type { Project } from '../types';
 
 const REVIEW_CONTEXT_MOCK_ID = '\u0000project-board-review-context-mock';
+const DASHBOARD_CONTEXT_MOCK_ID = '\u0000project-board-dashboard-context-mock';
 
 function makeProject(overrides: Partial<Project> = {}): Project {
   return {
@@ -51,6 +52,23 @@ const reviewContextSource = `
   }
 `;
 
+const dashboardContextSource = `
+  export function useProjects() {
+    return {
+      projects: [],
+      settings: { showCompleted: false, idleDays: 14, theme: 'system', lastExportAt: null },
+      focus: { active: null },
+      setShowCompleted: () => {},
+      updateProject: () => {},
+      addStep: () => {},
+      duplicateProject: () => undefined,
+      exportData: () => {},
+      loadSeed: () => {},
+      ready: true,
+    };
+  }
+`;
+
 let viteServer: ViteDevServer | undefined;
 
 before(async () => {
@@ -69,10 +87,20 @@ before(async () => {
           ) {
             return REVIEW_CONTEXT_MOCK_ID;
           }
+          if (
+            source === '../store/ProjectContext' &&
+            (importer?.endsWith('/src/pages/Dashboard.tsx') ||
+              importer?.endsWith('/src/components/Onboarding.tsx') ||
+              importer?.endsWith('/src/components/FocusSessionDrawer.tsx'))
+          ) {
+            return DASHBOARD_CONTEXT_MOCK_ID;
+          }
           return undefined;
         },
         load(id) {
-          return id === REVIEW_CONTEXT_MOCK_ID ? reviewContextSource : undefined;
+          if (id === REVIEW_CONTEXT_MOCK_ID) return reviewContextSource;
+          if (id === DASHBOARD_CONTEXT_MOCK_ID) return dashboardContextSource;
+          return undefined;
         },
       },
     ],
@@ -129,15 +157,36 @@ describe('project signal component rendering', () => {
   });
 });
 
+describe('dashboard onboarding rendering', () => {
+  it('keeps onboarding and exposes the empty-workspace Focus section', async () => {
+    const module = await viteServer!.ssrLoadModule('/src/pages/Dashboard.tsx');
+    const Dashboard = module.Dashboard as ComponentType;
+    const markup = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(Dashboard),
+      ),
+    );
+
+    assert.match(markup, /class="onboarding"/);
+    assert.match(markup, /Your Project Board is ready/);
+    assert.equal(markup.match(/id="focus-projects-title"/g)?.length, 1);
+    assert.match(markup, /<h2[^>]*>Focus<\/h2>/);
+    assert.match(markup, /href="\/board"/);
+  });
+});
+
 describe('focus project rendering', () => {
   it('renders three focus project links, signals, and review overflow', async () => {
     const module = await viteServer!.ssrLoadModule('/src/components/FocusProjects.tsx');
     const FocusProjects = module.FocusProjects as ComponentType<{ projects: Project[] }>;
+    const staleUpdatedAt = new Date(Date.now() - 90 * 86_400_000).toISOString();
     const projects = reviewProjects.map((project, index) => ({
       ...project,
       steps: index === 1 ? [] : project.steps,
       notes_md: index === 0 ? 'Blocker: Waiting on API' : '',
-      updated_at: '2026-01-01T00:00:00.000Z',
+      updated_at: staleUpdatedAt,
     }));
     const markup = renderToStaticMarkup(
       createElement(

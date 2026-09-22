@@ -392,6 +392,8 @@ export function Dashboard() {
         </div>
       </div>
 
+      <FocusProjects projects={projects} />
+
       {showOnboarding ? (
         <Onboarding onSkip={() => setOnboardingSkipped(true)} />
       ) : (
@@ -451,8 +453,6 @@ export function Dashboard() {
               </button>
             </section>
           )}
-
-          <FocusProjects projects={projects} />
 
           {!isEmptyBoard && (
             <KpiRow stats={stats} showCompleted={showCompleted} />
