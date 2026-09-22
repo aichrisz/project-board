@@ -398,14 +398,18 @@ v0.10 visual contracts remain in force.
 ### 6.13 v0.13 — Conflict-safe project signals
 
 1. **Four project-signal commands** — the dependency-free Kei CLI provides
-   `set-blocker`, `clear-blocker`, `add-milestone`, and `set-next`. Blocker
-   commands append `Blocker: …` notes, `add-milestone` appends a note prefixed
-   with the current UTC date, and `set-next` renames the first unfinished step
-   in deterministic order. If no unfinished step exists, `set-next` refuses the
-   mutation and directs the user to `add-step` first.
+   `set-blocker`, `clear-blocker`, `add-milestone`, and `set-next`. `set-blocker`
+   appends a `Blocker: …` note; `clear-blocker` appends the exact
+   `Blocker: none.` sentinel, preserves earlier blocker lines as history, and
+   makes Focus treat the project as having no current blocker. `add-milestone`
+   appends a note prefixed with the current UTC date, and `set-next` renames the
+   first unfinished step in deterministic order. If no unfinished step exists,
+   `set-next` refuses the mutation and directs the user to `add-step` first.
 2. **Validated mutations** — project ids and bounded command text are validated
-   before any workspace write; malformed command usage and missing projects are
-   rejected without a partial update.
+   before any workspace write. Blocker and milestone text is limited to 2,000
+   characters, next-step titles to 400 characters, and total notes to 200,000
+   characters. Malformed command usage and missing projects are rejected
+   without a partial update.
 3. **Activity trail** — each of the four signal commands emits a
    `project_updated` activity event, while preserving the existing activity cap
    and workspace validation rules.

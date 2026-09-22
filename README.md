@@ -249,11 +249,15 @@ node scripts/project-board.mjs --owner aichriszme@gmail.com set-next PROJECT_ID 
 node scripts/project-board.mjs --owner aichriszme@gmail.com inspect PROJECT_ID
 ```
 
-`set-blocker` and `clear-blocker` append `Blocker:` notes; `add-milestone`
-appends a dated milestone note; and `set-next` renames the first unfinished
-step. If there is no unfinished step, use `add-step` first. Every mutation
-reads the current workspace and uses its ETag in `If-Match`; a stale write
-exits nonzero instead of overwriting newer data.
+`set-blocker` appends a `Blocker:` note; `clear-blocker` appends the exact
+`Blocker: none.` sentinel, preserves earlier blocker lines as history, and
+makes Focus treat the project as having no current blocker. `add-milestone`
+appends a dated milestone note, and `set-next` renames the first unfinished
+step. Blocker and milestone text is limited to 2,000 characters, next-step
+titles to 400 characters, and total notes to 200,000 characters. If there is
+no unfinished step, use `add-step` first. Every mutation reads the current
+workspace and uses its ETag in `If-Match`; a stale write exits nonzero instead
+of overwriting newer data.
 
 ## Tests
 
