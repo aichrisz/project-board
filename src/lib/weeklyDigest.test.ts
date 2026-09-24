@@ -304,6 +304,96 @@ describe('weekly digest', () => {
       ].sort());
     });
 
+    it('excludes status messages that only end in done', () => {
+      const events = [
+        makeEvent({ id: 'done', type: 'status_changed', message: '“Alpha” → done' }),
+        makeEvent({
+          id: 'not-done',
+          type: 'status_changed',
+          message: '“Alpha” → not done',
+        }),
+        makeEvent({ id: 'undone', type: 'status_changed', message: '“Alpha” → undone' }),
+      ];
+
+      assert.deepEqual(
+        deriveLatestWins([], events).map((win) => win.key),
+        ['activity:done'],
+      );
+    });
+
+    it('excludes activity wins with malformed, impossible or noncanonical timestamps', () => {
+      const events = [
+        makeEvent({
+          id: 'canonical',
+          type: 'status_changed',
+          message: '“Alpha” → done',
+          at: '2026-09-20T10:00:00.000Z',
+        }),
+        makeEvent({
+          id: 'offset',
+          type: 'status_changed',
+          message: '“Alpha” → done',
+          at: '2026-09-20T10:00:00+02:00',
+        }),
+        makeEvent({
+          id: 'impossible',
+          type: 'status_changed',
+          message: '“Alpha” → done',
+          at: '2026-02-30T10:00:00.000Z',
+        }),
+        makeEvent({
+          id: 'date-only',
+          type: 'status_changed',
+          message: '“Alpha” → done',
+          at: '2026-09-20',
+        }),
+        makeEvent({
+          id: 'malformed',
+          type: 'status_changed',
+          message: '“Alpha” → done',
+          at: 'not-a-date',
+        }),
+      ];
+
+      assert.deepEqual(
+        deriveLatestWins([], events).map((win) => win.key),
+        ['activity:canonical'],
+      );
+    });
+
+    it('includes the real mark-all-steps-done activity', () => {
+      const events = [
+        makeEvent({
+          id: 'all-done',
+          type: 'step_toggled',
+          message: 'Marked all steps done on “Alpha”',
+        }),
+        makeEvent({
+          id: 'cleared',
+          type: 'step_toggled',
+          message: 'Cleared all step completion on “Alpha”',
+        }),
+      ];
+
+      assert.deepEqual(
+        deriveLatestWins([], events).map((win) => win.key),
+        ['activity:all-done'],
+      );
+    });
+
+    it('accepts a four-digit milestone year below one hundred', () => {
+      const project = makeProject({
+        id: 'p1',
+        notes_md: 'Milestone 0099-09-21: Ancient ship',
+      });
+
+      const wins = deriveLatestWins([project], []);
+
+      assert.equal(wins.length, 1);
+      assert.equal(wins[0].at, '0099-09-21T00:00:00.000Z');
+      assert.equal(wins[0].text, 'Ancient ship');
+    });
+
     it('orders newest first, caps at five and does not mutate inputs', () => {
       const projects = [
         makeProject({

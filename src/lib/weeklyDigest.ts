@@ -1,4 +1,5 @@
 import type { ActivityEvent, Project } from '../types';
+import { isCanonicalInstant } from './focusSession';
 import { isTerminal } from './health';
 import {
   getBlocker,
@@ -9,6 +10,9 @@ import {
 } from './projectSignals';
 
 const MILESTONE_PATTERN = /^milestone\s+(\d{4})-(\d{2})-(\d{2})\s*:\s*(\S.*)$/i;
+const COMPLETED_STEP_PREFIX = 'Completed step ';
+const ALL_STEPS_DONE_PREFIX = 'Marked all steps done on ';
+const STATUS_DONE_PATTERN = /→\s*done$/i;
 const ATTENTION_LIMIT = 5;
 const WINS_LIMIT = 5;
 
@@ -87,15 +91,6 @@ export function deriveNeedsAttention(projects: Project[]): DigestAttentionItem[]
     }));
 }
 
-function isRealCalendarDate(year: number, month: number, day: number): boolean {
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
-  );
-}
-
 function timestampValue(at: string): number {
   const value = Date.parse(at);
   return Number.isNaN(value) ? Number.NEGATIVE_INFINITY : value;
@@ -109,16 +104,14 @@ function milestoneWins(projects: Project[]): DigestWin[] {
       const match = line.trim().match(MILESTONE_PATTERN);
       if (!match) continue;
 
-      const year = Number(match[1]);
-      const month = Number(match[2]);
-      const day = Number(match[3]);
       const text = match[4].trim();
-      if (!text || !isRealCalendarDate(year, month, day)) continue;
+      const at = `${match[1]}-${match[2]}-${match[3]}T00:00:00.000Z`;
+      if (!text || !isCanonicalInstant(at)) continue;
 
       const date = `${match[1]}-${match[2]}-${match[3]}`;
       wins.push({
         key: `milestone:${project.id}:${date}:${text}`,
-        at: new Date(Date.UTC(year, month - 1, day)).toISOString(),
+        at,
         projectId: project.id,
         text,
       });
@@ -128,16 +121,25 @@ function milestoneWins(projects: Project[]): DigestWin[] {
   return wins;
 }
 
+function isActivityWin(event: ActivityEvent): boolean {
+  if (!isCanonicalInstant(event.at)) return false;
+  if (event.type === 'step_toggled') {
+    return (
+      event.message.startsWith(COMPLETED_STEP_PREFIX) ||
+      event.message.startsWith(ALL_STEPS_DONE_PREFIX)
+    );
+  }
+  return (
+    event.type === 'status_changed' &&
+    STATUS_DONE_PATTERN.test(event.message.trim())
+  );
+}
+
 function activityWins(activity: ActivityEvent[]): DigestWin[] {
   const wins: DigestWin[] = [];
 
   for (const event of activity) {
-    const isCompletedStep =
-      event.type === 'step_toggled' && /^completed step /i.test(event.message);
-    const isStatusDone =
-      event.type === 'status_changed' &&
-      event.message.trim().toLowerCase().endsWith('done');
-    if (!isCompletedStep && !isStatusDone) continue;
+    if (!isActivityWin(event)) continue;
 
     wins.push({
       key: `activity:${event.id}`,
