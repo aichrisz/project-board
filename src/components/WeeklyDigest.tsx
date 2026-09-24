@@ -5,6 +5,7 @@ import {
   deriveKeepMoving,
   deriveLatestWins,
   deriveNeedsAttention,
+  type DigestWin,
 } from '../lib/weeklyDigest';
 
 type Props = {
@@ -12,11 +13,21 @@ type Props = {
   activity: ActivityEvent[];
 };
 
-function winDate(at: string): string {
-  return at.slice(0, 10);
+function winDate(win: DigestWin): string {
+  if (win.key.startsWith('milestone:')) {
+    return win.at.slice(0, 10);
+  }
+  const date = new Date(win.at);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 export function WeeklyDigest({ projects, activity }: Props) {
+  const projectIds = useMemo(
+    () => new Set(projects.map((project) => project.id)),
+    [projects],
+  );
   const keepMoving = useMemo(() => deriveKeepMoving(projects), [projects]);
   const attention = useMemo(() => deriveNeedsAttention(projects), [projects]);
   const wins = useMemo(
@@ -148,11 +159,15 @@ export function WeeklyDigest({ projects, activity }: Props) {
               {wins.map((win) => (
                 <li key={win.key} className="weekly-digest-item">
                   <Link
-                    to={win.projectId ? `/project/${win.projectId}` : '/activity'}
+                    to={
+                      win.projectId && projectIds.has(win.projectId)
+                        ? `/project/${win.projectId}`
+                        : '/activity'
+                    }
                     className="weekly-digest-link weekly-digest-win-link"
                   >
                     <time className="weekly-digest-win-date" dateTime={win.at}>
-                      {winDate(win.at)}
+                      {winDate(win)}
                     </time>
                     <span className="weekly-digest-win-text">{win.text}</span>
                   </Link>

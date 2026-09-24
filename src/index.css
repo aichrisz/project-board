@@ -2591,6 +2591,11 @@ a.link-chip-main:hover {
   margin-top: 0;
 }
 
+.review-actions .btn {
+  max-width: 100%;
+  white-space: normal;
+}
+
 .review-sections {
   display: flex;
   flex-direction: column;

@@ -8,6 +8,8 @@ import { MemoryRouter } from 'react-router';
 import { createServer, type ViteDevServer } from 'vite';
 import type { ActivityEvent, Project } from '../types';
 
+process.env.TZ = 'America/Los_Angeles';
+
 const REVIEW_CONTEXT_MOCK_ID = '\u0000project-board-review-context-mock';
 const DASHBOARD_CONTEXT_MOCK_ID = '\u0000project-board-dashboard-context-mock';
 const ACTIVITY_CONTEXT_MOCK_ID = '\u0000project-board-activity-context-mock';
@@ -422,6 +424,108 @@ describe('weekly digest rendering', () => {
     assert.match(markup, /Nothing needs attention\./);
     assert.match(markup, /No wins recorded yet\./);
   });
+
+  function winAnchors(markup: string) {
+    return [...markup.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)]
+      .filter((match) => match[1].includes('weekly-digest-win-link'))
+      .map((match) => {
+        const time = /<time\b([^>]*)>([^<]*)<\/time>/.exec(match[2]);
+        return {
+          attrs: match[1],
+          body: match[2],
+          datetime: time ? /dateTime="([^"]*)"/.exec(time[1])?.[1] : undefined,
+          label: time?.[2],
+        };
+      });
+  }
+
+  it('links live win projects to detail but falls back to activity when the project is gone', async () => {
+    const module = await viteServer!.ssrLoadModule('/src/components/WeeklyDigest.tsx');
+    const WeeklyDigest = module.WeeklyDigest as ComponentType<{
+      projects: Project[];
+      activity: ActivityEvent[];
+    }>;
+    const projects = [makeProject({ id: 'p0', title: 'Alpha' })];
+    const activity: ActivityEvent[] = [
+      {
+        id: 'ghost',
+        at: '2026-09-21T12:00:00.000Z',
+        type: 'status_changed',
+        projectId: 'ghost',
+        message: '“Ghost” → done',
+      },
+      {
+        id: 'live',
+        at: '2026-09-20T12:00:00.000Z',
+        type: 'status_changed',
+        projectId: 'p0',
+        message: '“Alpha” → done',
+      },
+    ];
+    const markup = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(WeeklyDigest, { projects, activity }),
+      ),
+    );
+
+    const anchors = winAnchors(markup);
+    const ghost = anchors.find((anchor) => anchor.body.includes('Ghost'));
+    const live = anchors.find((anchor) => anchor.body.includes('Alpha'));
+
+    assert.ok(ghost && live, 'expected both activity wins to render');
+    assert.match(ghost!.attrs, /href="\/activity"/);
+    assert.doesNotMatch(ghost!.attrs, /href="\/project\/ghost"/);
+    assert.match(live!.attrs, /href="\/project\/p0"/);
+  });
+
+  it('keeps stored milestone dates while rendering activity in the local calendar', async () => {
+    assert.equal(
+      new Date('2026-09-20T02:30:00.000Z').getDate(),
+      19,
+      'this regression requires the America/Los_Angeles timezone',
+    );
+    const module = await viteServer!.ssrLoadModule('/src/components/WeeklyDigest.tsx');
+    const WeeklyDigest = module.WeeklyDigest as ComponentType<{
+      projects: Project[];
+      activity: ActivityEvent[];
+    }>;
+    const projects = [
+      makeProject({
+        id: 'p0',
+        title: 'Alpha',
+        notes_md: 'Milestone 2026-09-20: Shipped stored date',
+      }),
+    ];
+    const activity: ActivityEvent[] = [
+      {
+        id: 'late-night',
+        at: '2026-09-20T02:30:00.000Z',
+        type: 'status_changed',
+        projectId: 'p0',
+        message: '“Alpha” → done',
+      },
+    ];
+    const markup = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(WeeklyDigest, { projects, activity }),
+      ),
+    );
+
+    const anchors = winAnchors(markup);
+    const activityWin = anchors.find((anchor) => anchor.body.includes('→ done'));
+    const milestoneWin = anchors.find((anchor) =>
+      anchor.body.includes('Shipped stored date'),
+    );
+
+    assert.ok(activityWin && milestoneWin, 'expected both wins to render');
+    assert.equal(activityWin!.label, '2026-09-19');
+    assert.equal(activityWin!.datetime, '2026-09-20T02:30:00.000Z');
+    assert.equal(milestoneWin!.label, '2026-09-20');
+  });
 });
 
 describe('weekly digest responsive css', () => {
@@ -447,5 +551,21 @@ describe('weekly digest responsive css', () => {
 
     assert.match(link, /min-height:\s*var\(--touch\);/);
     assert.match(focus, /outline:\s*2px solid var\(--pb-focus-ring\);/);
+  });
+});
+
+describe('review action overflow css', () => {
+  const css = readFileSync(
+    fileURLToPath(new URL('../index.css', import.meta.url)),
+    'utf8',
+  );
+
+  it('lets narrow review actions wrap without removing global button nowrap', () => {
+    const reviewButton = css.match(/\.review-actions\s+\.btn\s*\{([^}]*)\}/)?.[1] ?? '';
+    const baseButton = css.match(/(?:^|\n)\.btn\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    assert.match(reviewButton, /white-space:\s*normal;/);
+    assert.match(reviewButton, /max-width:\s*100%;/);
+    assert.match(baseButton, /white-space:\s*nowrap;/);
   });
 });
