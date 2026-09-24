@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
+import { WeeklyDigest } from '../components/WeeklyDigest';
 import {
   computeReviewBuckets,
   computeReviewKpis,
@@ -50,7 +51,7 @@ function ProjectListSection({
 }
 
 export function Review() {
-  const { projects, settings, focus, softArchiveIdle, exportData, ready } =
+  const { projects, settings, focus, softArchiveIdle, exportData, ready, activity } =
     useProjects();
   const [message, setMessage] = useState<string | null>(null);
 
@@ -114,6 +115,8 @@ export function Review() {
           {message}
         </p>
       )}
+
+      <WeeklyDigest projects={projects} activity={activity} />
 
       <div className="kpi-ledger review-kpi-row" role="group" aria-label="Review KPIs">
         <div className="kpi-cell">

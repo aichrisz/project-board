@@ -6,7 +6,7 @@ import { createElement, type ComponentType } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
 import { createServer, type ViteDevServer } from 'vite';
-import type { Project } from '../types';
+import type { ActivityEvent, Project } from '../types';
 
 const REVIEW_CONTEXT_MOCK_ID = '\u0000project-board-review-context-mock';
 const DASHBOARD_CONTEXT_MOCK_ID = '\u0000project-board-dashboard-context-mock';
@@ -41,9 +41,16 @@ const reviewProjects = Array.from({ length: 4 }, (_, index) =>
 
 const reviewContextSource = `
   const projects = ${JSON.stringify(reviewProjects)};
+  const activity = [{
+    id: 'a1',
+    at: '2026-09-20T00:00:00.000Z',
+    type: 'status_changed',
+    message: '“Project 0” → done',
+  }];
   export function useProjects() {
     return {
       projects,
+      activity,
       settings: { showCompleted: false, idleDays: 14, theme: 'system', lastExportAt: null },
       focus: { history: [] },
       softArchiveIdle: () => 0,
@@ -177,6 +184,21 @@ describe('project signal component rendering', () => {
       /4 projects in progress\. Consider continuing, pausing, or finishing one project\./,
     );
   });
+
+  it('mounts exactly one weekly digest before the KPI row', async () => {
+    const module = await viteServer!.ssrLoadModule('/src/pages/Review.tsx');
+    const Review = module.Review as ComponentType;
+    const markup = renderToStaticMarkup(
+      createElement(MemoryRouter, null, createElement(Review)),
+    );
+
+    assert.equal(markup.match(/id="weekly-digest-title"/g)?.length, 1);
+    assert.match(markup, /Weekly digest/);
+    assert.ok(
+      markup.indexOf('id="weekly-digest-title"') <
+        markup.indexOf('review-kpi-row'),
+    );
+  });
 });
 
 describe('activity rendering', () => {
@@ -301,5 +323,129 @@ describe('mobile project card targets', () => {
     );
     assert.doesNotMatch(focusCard, /(?:^|\n)\s*width\s*:/);
     assert.doesNotMatch(focusLink, /(?:^|\n)\s*width\s*:/);
+  });
+});
+
+describe('weekly digest rendering', () => {
+  const stale = new Date(Date.now() - 90 * 86_400_000).toISOString();
+
+  function milestoneNotes(count: number): string {
+    return Array.from(
+      { length: count },
+      (_, index) =>
+        `Milestone 2026-09-${String(index + 1).padStart(2, '0')}: Win ${String(index + 1).padStart(2, '0')}`,
+    ).join('\n');
+  }
+
+  it('renders the four headings, caps each section, and shows signals and links', async () => {
+    const module = await viteServer!.ssrLoadModule('/src/components/WeeklyDigest.tsx');
+    const WeeklyDigest = module.WeeklyDigest as ComponentType<{
+      projects: Project[];
+      activity: ActivityEvent[];
+    }>;
+    const projects = [
+      makeProject({
+        id: 'p0',
+        title: 'Alpha',
+        updated_at: stale,
+        notes_md: 'Blocker: Waiting on API',
+        steps: [],
+      }),
+      makeProject({ id: 'p1', title: 'Beta', updated_at: stale }),
+      makeProject({ id: 'p2', title: 'Gamma', updated_at: stale }),
+      makeProject({ id: 'p3', title: 'Delta', updated_at: stale }),
+      makeProject({
+        id: 'p4',
+        title: 'Epsilon',
+        status: 'paused',
+        updated_at: stale,
+        notes_md: 'Blocker: Frozen',
+      }),
+      makeProject({
+        id: 'p5',
+        title: 'Zeta',
+        status: 'idea',
+        updated_at: stale,
+        notes_md: milestoneNotes(6),
+      }),
+    ];
+    const markup = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(WeeklyDigest, { projects, activity: [] }),
+      ),
+    );
+
+    assert.match(markup, /<h2[^>]*>Weekly digest<\/h2>/);
+    assert.match(markup, /<h3[^>]*>Keep moving<\/h3>/);
+    assert.match(markup, /<h3[^>]*>Needs attention<\/h3>/);
+    assert.match(markup, /<h3[^>]*>Latest wins<\/h3>/);
+
+    assert.equal(markup.match(/class="weekly-digest-link"/g)?.length, 3);
+    assert.equal(
+      markup.match(/class="weekly-digest-link weekly-digest-attention-link"/g)?.length,
+      5,
+    );
+    assert.equal(
+      markup.match(/class="weekly-digest-link weekly-digest-win-link"/g)?.length,
+      5,
+    );
+
+    assert.match(markup, /Next action/);
+    assert.match(markup, /No next action recorded/);
+    assert.match(markup, /Blocker/);
+    assert.match(markup, /Waiting on API/);
+    assert.match(markup, /No blocker recorded/);
+    assert.match(markup, /Freshness/);
+    assert.match(markup, />Review<\/span>/);
+    assert.match(markup, /href="\/project\/p0"/);
+    assert.ok(markup.indexOf('Win 06') < markup.indexOf('Win 05'));
+  });
+
+  it('renders the three empty states', async () => {
+    const module = await viteServer!.ssrLoadModule('/src/components/WeeklyDigest.tsx');
+    const WeeklyDigest = module.WeeklyDigest as ComponentType<{
+      projects: Project[];
+      activity: ActivityEvent[];
+    }>;
+    const markup = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(WeeklyDigest, { projects: [], activity: [] }),
+      ),
+    );
+
+    assert.match(markup, /No projects in progress/);
+    assert.match(markup, /href="\/board"/);
+    assert.match(markup, /Nothing needs attention\./);
+    assert.match(markup, /No wins recorded yet\./);
+  });
+});
+
+describe('weekly digest responsive css', () => {
+  const css = readFileSync(
+    fileURLToPath(new URL('../index.css', import.meta.url)),
+    'utf8',
+  );
+
+  it('defaults to one column and switches to two columns at desktop', () => {
+    const grid = css.match(/\.weekly-digest-grid\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    assert.match(grid, /grid-template-columns:\s*1fr;/);
+    assert.match(grid, /min-width:\s*0;/);
+    assert.match(
+      css,
+      /@media\s*\(min-width:\s*1024px\)[\s\S]*?\.weekly-digest-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/,
+    );
+  });
+
+  it('keeps linked names focus-visible and touch-sized', () => {
+    const link = css.match(/\.weekly-digest-link\s*\{([^}]*)\}/)?.[1] ?? '';
+    const focus = css.match(/\.weekly-digest-link:focus-visible\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    assert.match(link, /min-height:\s*var\(--touch\);/);
+    assert.match(focus, /outline:\s*2px solid var\(--pb-focus-ring\);/);
   });
 });
