@@ -17,6 +17,8 @@ const PROJECT_STATUSES = new Set(['idea', 'planned', 'in_progress', 'paused', 'd
 const COMMAND_OPTIONS = new Set(['title', 'type', 'status', 'summary', 'url', 'owner']);
 const FORMAT_OPTIONS = new Set(['text', 'json']);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+$/;
+const ANSI_SEQUENCE = /(?:\u001B\[|\u009B)[0-?]*[ -/]*[@-~]|\u001B\][^\u0007\u001B]*(?:\u0007|\u001B\\)?|\u001B[PX^_][^\u001B]*(?:\u001B\\)?|\u001B[@-Z\\-_]/g;
+const CONTROL_SEQUENCE = /[\p{Cc}\u2028\u2029]/gu;
 
 export class CliError extends Error {
   constructor(message, exitCode = 1) {
@@ -441,41 +443,57 @@ function milestoneView(project) {
   return match ? match[1] : '';
 }
 
-function quoted(value) {
-  return value === null || value === undefined ? 'none' : `"${value}"`;
+function previewLine(value) {
+  return String(value)
+    .replace(ANSI_SEQUENCE, '')
+    .replace(CONTROL_SEQUENCE, ' ')
+    .replace(/"/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-function previewText(command, beforeWorkspace, result, etag) {
-  const before = result.steps
-    ? beforeWorkspace.projects.find((project) => project.id === result.id) ?? null
-    : ownerProject(beforeWorkspace, result.id);
-  const title = result.steps ? result.title : before?.title ?? result.title;
+function quoted(value) {
+  return value === null || value === undefined ? 'none' : `"${previewLine(value)}"`;
+}
+
+function previewProject(beforeWorkspace, afterWorkspace, result) {
+  if (result.steps) {
+    return beforeWorkspace.projects.find((project) => project.id === result.id)
+      ?? afterWorkspace.projects.find((project) => project.id === result.id)
+      ?? null;
+  }
+  return ownerProject(beforeWorkspace, result.id) ?? ownerProject(afterWorkspace, result.id) ?? null;
+}
+
+function previewText(command, beforeWorkspace, afterWorkspace, result, etag) {
+  const project = previewProject(beforeWorkspace, afterWorkspace, result);
+  const title = previewLine(project?.title ?? result.title);
   const lines = ['Dry run — no changes written', `Project: ${title}`];
 
   switch (command) {
     case 'add-project':
-      lines.push(`Added project: "${result.title}"`);
+      lines.push(`Added project: ${quoted(result.title)}`);
       break;
     case 'set-status':
-      lines.push(`Status: ${quoted(before?.status)} → ${quoted(result.status)}`);
+      lines.push(`Status: ${quoted(project?.status)} → ${quoted(result.status)}`);
       break;
     case 'add-step':
-      lines.push(`Added step: "${result.title}"`);
+      lines.push(`Added step: ${quoted(result.title)}`);
       break;
     case 'complete-step':
-      lines.push(`Step: "${result.title}" → done`);
+      lines.push(`Step: ${quoted(result.title)} → done`);
       break;
     case 'set-blocker':
-      lines.push(`Blocker: ${quoted(blockerView(before))} → ${quoted(blockerView(result))}`);
+      lines.push(`Blocker: ${quoted(blockerView(project))} → ${quoted(blockerView(result))}`);
       break;
     case 'clear-blocker':
-      lines.push(`Blocker: ${quoted(blockerView(before))} → none`);
+      lines.push(`Blocker: ${quoted(blockerView(project))} → none`);
       break;
     case 'add-milestone':
-      lines.push(`Added milestone: "${milestoneView(result)}"`);
+      lines.push(`Added milestone: ${quoted(milestoneView(result))}`);
       break;
     case 'set-next':
-      lines.push(`Next action: ${quoted(nextActionTitle(before))} → ${quoted(nextActionTitle(result))}`);
+      lines.push(`Next action: ${quoted(nextActionTitle(project))} → ${quoted(nextActionTitle(result))}`);
       break;
     default:
       break;
@@ -490,7 +508,7 @@ function simulateCommand(workspace, positionals, options, command, etag) {
   const result = executeCommand(clone, positionals, options);
   return {
     preview: { dryRun: true, etag, command, result, workspace: clone },
-    text: previewText(command, workspace, result, etag),
+    text: previewText(command, workspace, clone, result, etag),
   };
 }
 

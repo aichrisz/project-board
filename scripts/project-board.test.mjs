@@ -58,6 +58,13 @@ function json(result) {
   return JSON.parse(result.stdout);
 }
 
+function assertNoTerminalControls(output, label) {
+  assert.equal(/[\u001B\u009B]/.test(output), false, `${label}: escape/CSI byte`);
+  assert.equal(/[\p{Cc}]/u.test(output.replace(/[\n\t]/g, '')), false, `${label}: control byte`);
+  assert.equal(/[\u2028\u2029]/.test(output), false, `${label}: line separator`);
+  assert.equal(output.includes('\r'), false, `${label}: carriage return`);
+}
+
 function identity(email = OWNER) {
   return { [IDENTITY]: email };
 }
@@ -651,6 +658,85 @@ describe('Kei project board CLI', () => {
       const loaded = await loadWorkspace(baseUrl);
       assert.equal(loaded.workspace.projects[0].summary, 'winner');
       assert.equal(loaded.workspace.projects[0].notes_md, 'Blocker: Written');
+    });
+  });
+
+  it('names the existing target project in add-step text preview', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'Existing target project'], url));
+      const baseline = await loadWorkspace(url);
+
+      await withProxy(url, null, async (proxyUrl, putCount) => {
+        const result = await runCli(['--dry-run', 'add-step', project.id, 'Brand new step'], proxyUrl);
+        assert.equal(result.code, 0, result.stderr);
+        assert.equal(putCount(), 0);
+        assert.match(result.stdout, /^Project: Existing target project$/m);
+        assert.doesNotMatch(result.stdout, /^Project: Brand new step$/m);
+        assert.match(result.stdout, /Added step: "Brand new step"/);
+        assert.ok(result.stdout.includes(`ETag: ${baseline.etag}`));
+      });
+
+      const after = await loadWorkspace(url);
+      assert.equal(after.etag, baseline.etag);
+      assert.deepEqual(after.workspace, baseline.workspace);
+    });
+  });
+
+  it('sanitizes every text preview field and preserves raw JSON values', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'Hostile seed'], url));
+      const current = await loadWorkspace(url);
+      const seed = current.workspace.projects[0];
+      const hostileTitle = 'Evil\u001B[31m\r\nProject"quote"';
+      const hostileStepTitle = 'Do\u001B[2Jit\nnow\u0007\u007F';
+      const hostileNotes = 'Blocker: wait\u001B]0;owned\u0007\r\nMilestone 2024-01-01: ship\n"quoted"';
+      seed.title = hostileTitle;
+      seed.notes_md = hostileNotes;
+      seed.steps = [{ id: 'hostile-step', title: hostileStepTitle, done: false, order: 1 }];
+      seed.progress_pct = 0;
+      assert.equal((await putWorkspace(url, current.workspace, current.etag)).status, 204);
+      const baseline = await loadWorkspace(url);
+
+      const commands = [
+        ['set-status', project.id, 'planned'],
+        ['add-step', project.id, 'New\u001B[31mstep"'],
+        ['complete-step', project.id, 'hostile-step'],
+        ['set-blocker', project.id, 'wait\u001B[31m now'],
+        ['clear-blocker', project.id],
+        ['add-milestone', project.id, 'ship\u001B[31m"it"'],
+        ['set-next', project.id, 'next\u001B[31m"step"'],
+      ];
+
+      for (const args of commands) {
+        await withProxy(url, null, async (proxyUrl, putCount) => {
+          const result = await runCli(['--dry-run', ...args], proxyUrl);
+          assert.equal(result.code, 0, result.stderr);
+          assert.equal(putCount(), 0);
+          assertNoTerminalControls(result.stdout, args[0]);
+          assert.equal(result.stdout.trimEnd().split('\n').length, 4, `${args[0]}: one line per field`);
+          assert.match(result.stdout, /^Project: /m);
+          assert.ok(result.stdout.includes(`ETag: ${baseline.etag}`));
+        });
+        const after = await loadWorkspace(url);
+        assert.equal(after.etag, baseline.etag);
+        assert.deepEqual(after.workspace, baseline.workspace);
+      }
+
+      const status = await runCli(['--dry-run', 'set-status', project.id, 'planned'], url);
+      assert.match(status.stdout, /^Project: Evil Project'quote'$/m);
+      assert.doesNotMatch(status.stdout, /Project"quote"/);
+      assert.doesNotMatch(status.stdout, /Evil\[31m/);
+
+      const envelope = JSON.parse((await runCli(['--dry-run', '--format', 'json', 'set-status', project.id, 'planned'], url)).stdout);
+      const simulated = envelope.workspace.projects.find((entry) => entry.id === project.id);
+      assert.equal(simulated.title, hostileTitle);
+      assert.equal(simulated.notes_md, hostileNotes);
+      assert.equal(simulated.steps[0].title, hostileStepTitle);
+      assert.equal(envelope.result.title, hostileTitle);
+
+      const final = await loadWorkspace(url);
+      assert.equal(final.etag, baseline.etag);
+      assert.deepEqual(final.workspace, baseline.workspace);
     });
   });
 });
