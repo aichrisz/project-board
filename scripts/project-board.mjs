@@ -15,6 +15,7 @@ const MAX_STEPS = 500;
 const PROJECT_TYPES = new Set(['game', 'web', 'tool', 'learning', 'infra', 'other']);
 const PROJECT_STATUSES = new Set(['idea', 'planned', 'in_progress', 'paused', 'done', 'archived']);
 const COMMAND_OPTIONS = new Set(['title', 'type', 'status', 'summary', 'url', 'owner']);
+const FORMAT_OPTIONS = new Set(['text', 'json']);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+$/;
 
 export class CliError extends Error {
@@ -34,7 +35,7 @@ class ConflictError extends CliError {
 
 function usage() {
   return [
-    'Usage: project-board [--url URL] [--owner EMAIL] COMMAND',
+    'Usage: project-board [--url URL] [--owner EMAIL] [--dry-run] [--format text|json] COMMAND',
     '',
     'Commands:',
     '  list [projects]',
@@ -102,10 +103,17 @@ function parseArgs(argv) {
     }
     const equals = argument.indexOf('=');
     const key = argument.slice(2, equals === -1 ? undefined : equals);
-    if (!COMMAND_OPTIONS.has(key)) throw new CliError(`unknown option --${key}`);
+    if (key === 'dry-run') {
+      if (equals !== -1) throw new CliError('flag --dry-run does not take a value');
+      if (options.has(key)) throw new CliError(`duplicate option --${key}`);
+      options.set(key, 'true');
+      continue;
+    }
+    if (!COMMAND_OPTIONS.has(key) && key !== 'format') throw new CliError(`unknown option --${key}`);
     if (options.has(key)) throw new CliError(`duplicate option --${key}`);
     const value = equals === -1 ? argv[++index] : argument.slice(equals + 1);
     if (value === undefined || value.startsWith('--')) throw new CliError(`value required for --${key}`);
+    if (key === 'format' && !FORMAT_OPTIONS.has(value)) throw new CliError('format must be one of: text, json');
     options.set(key, value);
   }
   return { options, positionals };
@@ -388,21 +396,135 @@ function executeCommand(workspace, positionals, options) {
   throw new CliError(`unknown command: ${command}`);
 }
 
+function describeCommand(positionals) {
+  const command = positionals[0];
+  if (command === 'list') return { name: 'list', mutating: false };
+  if (command === 'inspect') return { name: 'inspect', mutating: false };
+  if (command === 'add-project' || (command === 'add' && positionals[1] === 'project')) return { name: 'add-project', mutating: true };
+  if (command === 'set-status' || (command === 'set' && positionals[1] === 'project' && positionals[2] === 'status')) return { name: 'set-status', mutating: true };
+  if (command === 'add-step' || (command === 'add' && positionals[1] === 'step')) return { name: 'add-step', mutating: true };
+  if (command === 'complete-step' || (command === 'complete' && positionals[1] === 'step')) return { name: 'complete-step', mutating: true };
+  if (command === 'set-blocker') return { name: 'set-blocker', mutating: true };
+  if (command === 'clear-blocker') return { name: 'clear-blocker', mutating: true };
+  if (command === 'add-milestone') return { name: 'add-milestone', mutating: true };
+  if (command === 'set-next') return { name: 'set-next', mutating: true };
+  return null;
+}
+
+function blockerView(project) {
+  if (!project) return null;
+  for (const line of project.notes_md.split(/\r?\n/).reverse()) {
+    const match = line.match(/^blocker:(.*)$/i);
+    const value = match?.[1].trim();
+    const normalized = value?.toLowerCase().replace(/\.$/, '');
+    if (normalized === 'none') return null;
+    if (value) return value;
+  }
+  return null;
+}
+
+function nextActionTitle(project) {
+  if (!project) return null;
+  const step = project.steps
+    .filter((entry) => !entry.done)
+    .sort((left, right) => left.order - right.order || left.id.localeCompare(right.id))[0];
+  return step ? step.title : null;
+}
+
+function ownerProject(workspace, stepId) {
+  return workspace.projects.find((project) => project.steps.some((step) => step.id === stepId)) ?? null;
+}
+
+function milestoneView(project) {
+  const line = project.notes_md.split(/\r?\n/).at(-1) ?? '';
+  const match = line.match(/^Milestone \d{4}-\d{2}-\d{2}: (.*)$/);
+  return match ? match[1] : '';
+}
+
+function quoted(value) {
+  return value === null || value === undefined ? 'none' : `"${value}"`;
+}
+
+function previewText(command, beforeWorkspace, result, etag) {
+  const before = result.steps
+    ? beforeWorkspace.projects.find((project) => project.id === result.id) ?? null
+    : ownerProject(beforeWorkspace, result.id);
+  const title = result.steps ? result.title : before?.title ?? result.title;
+  const lines = ['Dry run — no changes written', `Project: ${title}`];
+
+  switch (command) {
+    case 'add-project':
+      lines.push(`Added project: "${result.title}"`);
+      break;
+    case 'set-status':
+      lines.push(`Status: ${quoted(before?.status)} → ${quoted(result.status)}`);
+      break;
+    case 'add-step':
+      lines.push(`Added step: "${result.title}"`);
+      break;
+    case 'complete-step':
+      lines.push(`Step: "${result.title}" → done`);
+      break;
+    case 'set-blocker':
+      lines.push(`Blocker: ${quoted(blockerView(before))} → ${quoted(blockerView(result))}`);
+      break;
+    case 'clear-blocker':
+      lines.push(`Blocker: ${quoted(blockerView(before))} → none`);
+      break;
+    case 'add-milestone':
+      lines.push(`Added milestone: "${milestoneView(result)}"`);
+      break;
+    case 'set-next':
+      lines.push(`Next action: ${quoted(nextActionTitle(before))} → ${quoted(nextActionTitle(result))}`);
+      break;
+    default:
+      break;
+  }
+
+  lines.push(`ETag: ${etag}`);
+  return lines.join('\n');
+}
+
+function simulateCommand(workspace, positionals, options, command, etag) {
+  const clone = structuredClone(workspace);
+  const result = executeCommand(clone, positionals, options);
+  return {
+    preview: { dryRun: true, etag, command, result, workspace: clone },
+    text: previewText(command, workspace, result, etag),
+  };
+}
+
 export async function run(argv, { env = process.env, fetcher = fetch } = {}) {
   const { options, positionals } = parseArgs(argv);
   if (option(options, 'help') === 'true') return { help: usage() };
+  const dryRun = option(options, 'dry-run') === 'true';
+  const format = option(options, 'format') ?? 'text';
+  if (option(options, 'format') !== undefined && !dryRun) throw new CliError('--format requires --dry-run');
+  const descriptor = describeCommand(positionals);
+  if (dryRun && descriptor && !descriptor.mutating) {
+    throw new CliError('--dry-run is only valid for mutation commands');
+  }
   const config = resolveConfig(options, env);
   const { workspace, etag } = await getWorkspace(config, fetcher);
+  if (dryRun && descriptor && descriptor.mutating) {
+    const { preview, text } = simulateCommand(workspace, positionals, options, descriptor.name, etag);
+    return { dryRun: true, format, preview, text };
+  }
   const result = executeCommand(workspace, positionals, options);
-  const mutation = !['list', 'inspect'].includes(positionals[0]);
-  if (mutation) await putWorkspace(config, workspace, etag, fetcher);
+  if (descriptor ? descriptor.mutating : !['list', 'inspect'].includes(positionals[0])) {
+    await putWorkspace(config, workspace, etag, fetcher);
+  }
   return result;
 }
 
 async function main() {
   try {
     const result = await run(process.argv.slice(2));
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    if (result && result.dryRun === true) {
+      process.stdout.write(`${result.format === 'json' ? JSON.stringify(result.preview) : result.text}\n`);
+    } else {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'command failed';
     process.stderr.write(`${message.slice(0, 240)}\n`);

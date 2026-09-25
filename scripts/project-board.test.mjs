@@ -426,4 +426,231 @@ describe('Kei project board CLI', () => {
       assert.equal((await loadWorkspace(url)).etag, CREATION_ETAG);
     });
   });
+
+  it('previews every mutation family as text without writing', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'Preview target'], url));
+      const step = json(await runCli(['add-step', project.id, 'Initial step'], url));
+      const baseline = await loadWorkspace(url);
+
+      const cases = [
+        { args: ['add-project', '--title', 'Preview new'], pattern: /Project: Preview new\nAdded project: "Preview new"/ },
+        { args: ['set-status', project.id, 'in_progress'], pattern: /Status: "idea" → "in_progress"/ },
+        { args: ['add-step', project.id, 'Second step'], pattern: /Added step: "Second step"/ },
+        { args: ['complete-step', project.id, step.id], pattern: /Step: "Initial step" → done/ },
+        { args: ['set-blocker', project.id, 'Waiting on API'], pattern: /Blocker: none → "Waiting on API"/ },
+        { args: ['clear-blocker', project.id], pattern: /Blocker: none → none/ },
+        { args: ['add-milestone', project.id, 'Preview ship'], pattern: /Added milestone: "Preview ship"/ },
+        { args: ['set-next', project.id, 'Renamed next'], pattern: /Next action: "Initial step" → "Renamed next"/ },
+      ];
+
+      for (const { args, pattern } of cases) {
+        await withProxy(url, null, async (proxyUrl, putCount) => {
+          const result = await runCli(['--dry-run', ...args], proxyUrl);
+          assert.equal(result.code, 0, result.stderr);
+          assert.match(result.stdout, /^Dry run — no changes written\n/);
+          assert.match(result.stdout, pattern);
+          assert.ok(result.stdout.includes(`ETag: ${baseline.etag}`));
+          assert.equal(putCount(), 0);
+        });
+        const after = await loadWorkspace(url);
+        assert.equal(after.etag, baseline.etag);
+        assert.deepEqual(after.workspace, baseline.workspace);
+      }
+    });
+  });
+
+  it('recognizes mutation aliases in dry-run without writing', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'Alias target'], url));
+      const step = json(await runCli(['add-step', project.id, 'Alias step'], url));
+      const baseline = await loadWorkspace(url);
+      const commands = [
+        ['--dry-run', 'add', 'project', '--title', 'Alias new'],
+        ['--dry-run', 'set', 'project', 'status', project.id, 'planned'],
+        ['--dry-run', 'add', 'step', project.id, 'Alias second'],
+        ['--dry-run', 'complete', 'step', project.id, step.id],
+      ];
+
+      for (const args of commands) {
+        await withProxy(url, null, async (proxyUrl, putCount) => {
+          const result = await runCli(args, proxyUrl);
+          assert.equal(result.code, 0, result.stderr);
+          assert.match(result.stdout, /^Dry run — no changes written\n/);
+          assert.equal(putCount(), 0);
+        });
+      }
+
+      const canonical = await runCli(['--dry-run', '--format', 'json', 'add', 'project', '--title', 'Alias envelope'], url);
+      assert.equal(canonical.code, 0, canonical.stderr);
+      assert.equal(JSON.parse(canonical.stdout).command, 'add-project');
+
+      const after = await loadWorkspace(url);
+      assert.equal(after.etag, baseline.etag);
+      assert.deepEqual(after.workspace, baseline.workspace);
+    });
+  });
+
+  it('emits exactly one JSON envelope with the full simulated workspace', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'JSON preview'], url));
+      const step = json(await runCli(['add-step', project.id, 'JSON step'], url));
+      const baseline = await loadWorkspace(url);
+
+      await withProxy(url, null, async (proxyUrl, putCount) => {
+        const result = await runCli(['--dry-run', '--format', 'json', 'set-next', project.id, 'JSON next'], proxyUrl);
+        assert.equal(result.code, 0, result.stderr);
+        assert.equal(putCount(), 0);
+        const envelope = JSON.parse(result.stdout);
+        assert.deepEqual(Object.keys(envelope).sort(), ['command', 'dryRun', 'etag', 'result', 'workspace']);
+        assert.equal(envelope.dryRun, true);
+        assert.equal(envelope.etag, baseline.etag);
+        assert.equal(envelope.command, 'set-next');
+        assert.equal(envelope.result.id, project.id);
+        const simulated = envelope.workspace.projects.find((entry) => entry.id === project.id);
+        assert.equal(simulated.steps.find((entry) => entry.id === step.id).title, 'JSON next');
+      });
+
+      const after = await loadWorkspace(url);
+      assert.equal(after.etag, baseline.etag);
+      assert.deepEqual(after.workspace, baseline.workspace);
+      assert.equal(after.workspace.projects.find((entry) => entry.id === project.id).steps[0].title, 'JSON step');
+    });
+  });
+
+  it('keeps generated preview ids and timestamps out of the live workspace', async () => {
+    await withApp(async (url) => {
+      const seed = json(await runCli(['add-project', '--title', 'Stable project'], url));
+      const baseline = await loadWorkspace(url);
+
+      const first = JSON.parse((await runCli(['--dry-run', '--format', 'json', 'add-project', '--title', 'Ephemeral'], url)).stdout);
+      const second = JSON.parse((await runCli(['--dry-run', '--format', 'json', 'add-project', '--title', 'Ephemeral'], url)).stdout);
+      const simulated = first.workspace.projects.find((entry) => entry.title === 'Ephemeral');
+      assert.match(simulated.id, /^proj_[0-9a-f]{8}$/);
+      assert.notEqual(simulated.id, second.workspace.projects.find((entry) => entry.title === 'Ephemeral').id);
+
+      const live = await loadWorkspace(url);
+      assert.equal(live.etag, baseline.etag);
+      assert.deepEqual(live.workspace, baseline.workspace);
+      assert.equal(live.workspace.projects.some((entry) => entry.id === simulated.id), false);
+      assert.equal(live.workspace.projects.some((entry) => entry.title === 'Ephemeral'), false);
+      assert.equal(live.workspace.projects.some((entry) => entry.id === seed.id), true);
+    });
+  });
+
+  it('does not leak credentials or headers in preview output', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'Secret target'], url));
+      const result = await runCli(['--dry-run', 'set-blocker', project.id, 'Waiting'], url);
+      assert.equal(result.code, 0, result.stderr);
+      const secrets = [OWNER, IDENTITY, 'if-match', 'authorization', 'cookie', 'cf-access'];
+      for (const secret of secrets) {
+        assert.equal(result.stdout.toLowerCase().includes(secret.toLowerCase()), false, secret);
+        assert.equal(result.stderr.toLowerCase().includes(secret.toLowerCase()), false, secret);
+      }
+    });
+  });
+
+  it('rejects dry-run reads and invalid format combinations before any PUT', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'Guard target'], url));
+      const before = await loadWorkspace(url);
+      const cases = [
+        { args: ['--dry-run', 'list'], pattern: /only valid for mutation/i },
+        { args: ['--dry-run', 'inspect', project.id], pattern: /only valid for mutation/i },
+        { args: ['--format', 'text', 'list'], pattern: /requires --dry-run/i },
+        { args: ['--format', 'text', 'set-blocker', project.id, 'x'], pattern: /requires --dry-run/i },
+        { args: ['--dry-run', '--format', 'yaml', 'set-blocker', project.id, 'x'], pattern: /format must be one of: text, json/i },
+        { args: ['--dry-run', '--format'], pattern: /value required for --format/i },
+        { args: ['--dry-run', '--dry-run', 'set-blocker', project.id, 'x'], pattern: /duplicate option --dry-run/i },
+        { args: ['--dry-run', '--format', 'text', '--format', 'json', 'set-blocker', project.id, 'x'], pattern: /duplicate option --format/i },
+      ];
+
+      for (const { args, pattern } of cases) {
+        await withProxy(url, null, async (proxyUrl, putCount) => {
+          const result = await runCli(args, proxyUrl);
+          assert.notEqual(result.code, 0);
+          assert.match(result.stderr, pattern);
+          assert.equal(putCount(), 0);
+        });
+        const after = await loadWorkspace(url);
+        assert.equal(after.etag, before.etag);
+        assert.deepEqual(after.workspace, before.workspace);
+      }
+    });
+  });
+
+  it('retains mutation validation errors in dry-run without PUT', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'Validate preview'], url));
+      const cases = [
+        { args: ['--dry-run', 'set-blocker', 'missing-project', 'x'], pattern: /project not found: missing-project/ },
+        { args: ['--dry-run', 'set-blocker', project.id, '   '], pattern: /blocker text is required/i },
+        { args: ['--dry-run', 'set-blocker', project.id, 'x'.repeat(2001)], pattern: /blocker text.*2000/i },
+        { args: ['--dry-run', 'add-milestone', project.id, 'x'.repeat(2001)], pattern: /milestone text.*2000/i },
+        { args: ['--dry-run', 'set-next', project.id, 'x'], pattern: /add-step/i },
+      ];
+
+      for (const { args, pattern } of cases) {
+        const baseline = await loadWorkspace(url);
+        await withProxy(url, null, async (proxyUrl, putCount) => {
+          const result = await runCli(args, proxyUrl);
+          assert.notEqual(result.code, 0);
+          assert.match(result.stderr, pattern);
+          assert.equal(putCount(), 0);
+        });
+        const after = await loadWorkspace(url);
+        assert.equal(after.etag, baseline.etag);
+        assert.deepEqual(after.workspace, baseline.workspace);
+      }
+
+      const overflow = await loadWorkspace(url);
+      overflow.workspace.projects[0].notes_md = 'x'.repeat(199_999);
+      assert.equal((await putWorkspace(url, overflow.workspace, overflow.etag)).status, 204);
+      const overflowBaseline = await loadWorkspace(url);
+
+      await withProxy(url, null, async (proxyUrl, putCount) => {
+        const result = await runCli(['--dry-run', 'set-blocker', project.id, 'x'], proxyUrl);
+        assert.notEqual(result.code, 0);
+        assert.match(result.stderr, /notes.*200000/i);
+        assert.equal(putCount(), 0);
+      });
+
+      const final = await loadWorkspace(url);
+      assert.equal(final.etag, overflowBaseline.etag);
+      assert.deepEqual(final.workspace, overflowBaseline.workspace);
+    });
+  });
+
+  it('performs a fresh real mutation after a dry run and keeps conflict exit 2', async () => {
+    await withApp(async (baseUrl) => {
+      const project = json(await runCli(['add-project', '--title', 'Fresh target'], baseUrl));
+      const dry = await runCli(['--dry-run', 'set-blocker', project.id, 'Not written'], baseUrl);
+      assert.equal(dry.code, 0, dry.stderr);
+
+      const unchanged = await loadWorkspace(baseUrl);
+      assert.equal(unchanged.workspace.projects[0].notes_md, '');
+
+      json(await runCli(['set-blocker', project.id, 'Written'], baseUrl));
+      const changed = await loadWorkspace(baseUrl);
+      assert.match(changed.workspace.projects[0].notes_md, /Blocker: Written/);
+      assert.notEqual(changed.etag, unchanged.etag);
+
+      await withProxy(baseUrl, async () => {
+        const current = await loadWorkspace(baseUrl);
+        const winning = structuredClone(current.workspace);
+        winning.projects[0].summary = 'winner';
+        assert.equal((await putWorkspace(baseUrl, winning, current.etag)).status, 204);
+      }, async (proxyUrl, putCount) => {
+        const result = await runCli(['set-blocker', project.id, 'losing'], proxyUrl);
+        assert.equal(result.code, 2);
+        assert.match(result.stderr, /^conflict: workspace changed elsewhere; reload required\n$/);
+        assert.equal(putCount(), 1);
+      });
+
+      const loaded = await loadWorkspace(baseUrl);
+      assert.equal(loaded.workspace.projects[0].summary, 'winner');
+      assert.equal(loaded.workspace.projects[0].notes_md, 'Blocker: Written');
+    });
+  });
 });
