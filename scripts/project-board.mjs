@@ -437,9 +437,10 @@ function ownerProject(workspace, stepId) {
   return workspace.projects.find((project) => project.steps.some((step) => step.id === stepId)) ?? null;
 }
 
-function milestoneView(project) {
-  const line = project.notes_md.split(/\r?\n/).at(-1) ?? '';
-  const match = line.match(/^Milestone \d{4}-\d{2}-\d{2}: (.*)$/);
+function milestoneView(before, after) {
+  const previous = before?.notes_md.trimEnd() ?? '';
+  const note = previous ? after.notes_md.slice(previous.length + 1) : after.notes_md;
+  const match = note.match(/^Milestone \d{4}-\d{2}-\d{2}: (.*)$/s);
   return match ? match[1] : '';
 }
 
@@ -490,7 +491,7 @@ function previewText(command, beforeWorkspace, afterWorkspace, result, etag) {
       lines.push(`Blocker: ${quoted(blockerView(project))} → none`);
       break;
     case 'add-milestone':
-      lines.push(`Added milestone: ${quoted(milestoneView(result))}`);
+      lines.push(`Added milestone: ${quoted(milestoneView(project, result))}`);
       break;
     case 'set-next':
       lines.push(`Next action: ${quoted(nextActionTitle(project))} → ${quoted(nextActionTitle(result))}`);

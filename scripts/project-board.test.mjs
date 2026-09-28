@@ -467,6 +467,28 @@ describe('Kei project board CLI', () => {
     });
   });
 
+  it('summarizes a multiline milestone in the dry-run text preview', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'Multiline milestone'], url));
+      const baseline = await loadWorkspace(url);
+
+      await withProxy(url, null, async (proxyUrl, putCount) => {
+        const text = await runCli(['--dry-run', 'add-milestone', project.id, 'ship\nnext'], proxyUrl);
+        assert.equal(text.code, 0, text.stderr);
+        assert.match(text.stdout, /^Added milestone: "ship next"$/m);
+        assert.equal(text.stdout.trimEnd().split('\n').length, 4);
+
+        const envelope = JSON.parse((await runCli(['--dry-run', '--format', 'json', 'add-milestone', project.id, 'ship\nnext'], proxyUrl)).stdout);
+        assert.match(envelope.result.notes_md, /^Milestone \d{4}-\d{2}-\d{2}: ship\nnext$/);
+        assert.equal(putCount(), 0);
+      });
+
+      const after = await loadWorkspace(url);
+      assert.equal(after.etag, baseline.etag);
+      assert.deepEqual(after.workspace, baseline.workspace);
+    });
+  });
+
   it('recognizes mutation aliases in dry-run without writing', async () => {
     await withApp(async (url) => {
       const project = json(await runCli(['add-project', '--title', 'Alias target'], url));
