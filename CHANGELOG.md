@@ -2,6 +2,31 @@
 
 All notable changes to Project Board. Local-first single-owner app; dates are UTC.
 
+## 0.14.0 — Guided Brief & mutation previews (2026-09-28)
+
+### Added
+
+- **Guided Brief.** Weekly Digest opens with deterministic focus, attention,
+  and latest-win sections before the KPI row, with bounded lists, factual
+  project links, neutral empty states, and responsive one/two-column layout.
+- **CLI mutation previews.** Every mutation supports `--dry-run`; concise text
+  is the default and `--format json` emits one envelope containing `dryRun`,
+  source ETag, canonical command, result, and the full simulated workspace.
+
+### Safety
+
+- Dry runs clone one fetched workspace revision, reuse the real mutation path,
+  and never PUT. Preview ids and timestamps stay simulated; a subsequent real
+  mutation performs a fresh GET and retains conflict exit `2`.
+- Text previews name the owning project and remove terminal control sequences,
+  embedded line breaks, and ambiguous quotes. JSON preserves exact values.
+- A preview ETag identifies its source revision only; it is not a reservation.
+
+### Unchanged
+
+- The workspace/export schema remains `version: 1`; no dependency, storage key,
+  route, credential, or secret-handling behavior changed.
+
 ## 0.13.0 — Conflict-safe project signals (2026-09-22)
 
 ### Added

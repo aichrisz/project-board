@@ -4,7 +4,7 @@ A **local-first** personal project inventory dashboard. Track status, progress, 
 
 - **Product name:** Project Board  
 - **Stack:** Vite + React + TypeScript  
-- **Version:** 0.13.0
+- **Version:** 0.14.0
 - **Storage:** authenticated-owner SQLite workspace with browser `localStorage` offline cache
 - **UI language:** English  
 
@@ -38,6 +38,18 @@ The v0.9 accessibility contracts remain in force: the mobile menu and `?` dialog
 retain their shared focus lifecycle, Board-owned keys are claimed before action
 resolution, and the narrow Board hint is static, real-overflow-gated,
 non-focusable, session-only, and never persisted.
+
+## Guided Brief & CLI mutation previews (v0.14)
+
+The Weekly Review’s Weekly Digest adds a Guided Brief before its KPI row: up to
+three focus projects, projects needing attention, and recent wins. Its ordering and
+caps are deterministic, links remain factual, and empty states stay neutral.
+
+CLI mutations support `--dry-run` with concise text by default or one complete
+JSON envelope via `--format json`. A preview clones one fetched workspace
+revision, runs the existing mutation logic on that clone, and never sends a
+PUT. Its ETag identifies the source revision only: a preview is not a
+reservation, so a later real mutation performs a fresh GET and may conflict.
 
 ## Deployment (v0.8.2)
 
@@ -231,7 +243,7 @@ checks SQLite integrity, owner, and expected 31-project inventory, then removes
 the successful restore. Failed staging is retained for diagnosis and should be
 removed after the incident is resolved.
 
-## Kei CLI (v0.13)
+## Kei CLI (v0.14)
 
 The dependency-free local CLI talks to the workspace API only; it never opens
 SQLite or stores credentials. The URL defaults to `http://127.0.0.1:8780` and
@@ -247,6 +259,8 @@ node scripts/project-board.mjs --owner aichriszme@gmail.com clear-blocker PROJEC
 node scripts/project-board.mjs --owner aichriszme@gmail.com add-milestone PROJECT_ID "Ship it"
 node scripts/project-board.mjs --owner aichriszme@gmail.com set-next PROJECT_ID "Check the queue"
 node scripts/project-board.mjs --owner aichriszme@gmail.com inspect PROJECT_ID
+node scripts/project-board.mjs --owner aichriszme@gmail.com --dry-run set-blocker PROJECT_ID "Waiting for API"
+node scripts/project-board.mjs --owner aichriszme@gmail.com --dry-run --format json set-next PROJECT_ID "Check the queue"
 ```
 
 `set-blocker` appends a `Blocker:` note; `clear-blocker` appends the exact
@@ -258,6 +272,12 @@ titles to 400 characters, and total notes to 200,000 characters. If there is
 no unfinished step, use `add-step` first. Every mutation reads the current
 workspace and uses its ETag in `If-Match`; a stale write exits nonzero instead
 of overwriting newer data.
+
+`--dry-run` is accepted only for mutation commands. Default text previews are
+terminal-safe and concise; `--format json` returns the canonical command,
+source ETag, result, and full simulated workspace. Preview-generated ids and
+timestamps exist only in that simulated output. A preview never writes and is
+not a reservation: the next real mutation fetches the workspace and ETag again.
 
 ## Tests
 

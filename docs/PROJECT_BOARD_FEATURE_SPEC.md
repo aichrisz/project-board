@@ -3,9 +3,9 @@
 **Document type:** Portable product specification  
 **Audience:** Any AI or engineer implementing, reviewing, or extending the app  
 **Product name:** Project Board  
-**Current documented version:** 0.13.0 (Conflict-safe project signals)\
-**Current shipped capability:** all features through **v0.13.0**; visible runtime version chrome and package metadata are synchronized at **v0.13.0**\
-**Last updated:** 2026-09-22
+**Current documented version:** 0.14.0 (Guided Brief & mutation previews)\
+**Current shipped capability:** all features through **v0.14.0**; visible runtime version chrome and package metadata are synchronized at **v0.14.0**\
+**Last updated:** 2026-09-28
 
 This document is **self-contained**. It describes *what the product is* and *what features exist*. It does **not** depend on a specific host, owner name, or agent toolchain.
 
@@ -193,7 +193,7 @@ grades, or recommendations.
 ## 6. Feature inventory by version
 
 Use this as a capability checklist. Versions are incremental; **current documented
-ship = all rows through 0.13.0**. Version 0.8.2 added no product features
+ship = all rows through 0.14.0**. Version 0.8.2 added no product features
 (documentation and release metadata only).
 
 ### 6.1 v0.1 — MVP
@@ -363,7 +363,7 @@ horizontal scroll behavior are preserved.
    recommendations.
 
 **Version boundary:** v0.11.0 describes the Focus Session feature set. The
-current v0.13.0 release metadata is documented below; application semver and
+current v0.14.0 release metadata is documented below; application semver and
 the existing workspace document schema version `1` remain independent. No new
 dependency, storage key, route, keyboard shortcut, telemetry, analytics,
 notification, or network behavior was added. The existing v0.9 accessibility and
@@ -421,6 +421,31 @@ v0.10 visual contracts remain in force.
    spec identify **v0.13.0**. The workspace and export document schema remains
    `version: 1`; no dependency, storage key, route, or credential behavior
    changes.
+
+### 6.14 v0.14 — Guided Brief & mutation previews
+
+1. **Guided Brief** — Weekly Digest begins before the KPI row with up to three
+   focus projects, a bounded needs-attention list, and recent wins. Ordering,
+   tie-breaks, caps, and empty states are deterministic; live projects link to
+   detail, while removed-project activity falls back honestly.
+2. **Responsive and accessible digest** — the brief is one column by default
+   and two on desktop. Linked names remain keyboard-focusable and touch-sized;
+   narrow review actions wrap without changing the global button contract.
+3. **Mutation dry runs** — every CLI mutation accepts `--dry-run`, executes the
+   existing mutation against a `structuredClone` of one fetched workspace, and
+   skips PUT. Read commands reject dry-run, and existing validation errors are
+   preserved without writes.
+4. **Two output formats** — text is concise, deterministic, terminal-safe, and
+   identifies the owning project. `--format json` emits exactly one envelope
+   with `dryRun`, source `etag`, canonical command, result, and full simulated
+   workspace while preserving exact JSON values.
+5. **Concurrency boundary** — preview ids/timestamps exist only in simulated
+   output. The source ETag is informational, not a reservation; a later real
+   mutation performs a fresh GET+PUT and retains conflict exit `2`.
+6. **Release boundary** — `package.json`, both root versions in
+   `package-lock.json`, `src/version.ts`, README, changelog, and this portable
+   spec identify **v0.14.0**. Workspace/export schema remains `version: 1`, and
+   no dependency was added.
 
 ---
 
@@ -490,7 +515,7 @@ src/
 
 ## 10. Acceptance / verify checklist (current product)
 
-An implementation is “feature-complete for 0.13” if:
+An implementation is “feature-complete for 0.14” if:
 
 - [ ] `npm run build` succeeds  
 - [ ] Create/edit/delete project works and survives reload  
@@ -503,13 +528,18 @@ An implementation is “feature-complete for 0.13” if:
 - [ ] Focus chip + URL work  
 - [ ] Duplicate creates idea copy with unchecked steps  
 - [ ] Link chips safe for http(s) / path-like  
-- [x] Footer/chrome and package metadata are synchronized at **v0.13.0**
+- [x] Footer/chrome and package metadata are synchronized at **v0.14.0**
 - [ ] Kei CLI uses the default loopback API and accepts an explicit owner
 - [ ] `set-blocker`, `clear-blocker`, `add-milestone`, and `set-next` validate
       input and emit `project_updated`; `set-next` directs to `add-step` when
       no unfinished step exists
 - [ ] CLI mutations use `If-Match` and reject stale writes without overwriting
       newer workspace data
+- [ ] Weekly Digest renders one Guided Brief before KPIs with deterministic
+      focus, attention, and latest-win sections
+- [ ] CLI `--dry-run` previews every mutation without PUT; default text is
+      terminal-safe and `--format json` preserves the full simulated workspace
+- [ ] Preview ETags describe one source revision and do not reserve a later write
 - [ ] Workspace and export schema remains `version: 1`
 - [ ] Import rejects malformed, unsafe, or oversized files with a plain-language message
 - [ ] `/review` weekly review works  
@@ -545,7 +575,7 @@ Possible later themes (only if product owner approves a plan):
 
 1. Treat **§2 principles** as hard constraints.  
 2. Treat **§6** as the feature backlog already shipped (do not re-propose v0.1–v0.5 as “new” unless fixing bugs).  
-3. For new work: propose a **post-v0.13 plan** against gaps only; keep the offline cache, authenticated owner workspace, and CLI concurrency contract aligned.
+3. For new work: propose a **post-v0.14 plan** against gaps only; keep the offline cache, authenticated owner workspace, and CLI concurrency contract aligned.
 4. Prefer small, versioned increments with verify via `npm run build` + manual smoke of routes above.  
 5. Keep UI English and product name **Project Board**.  
 
@@ -564,4 +594,4 @@ Possible later themes (only if product owner approves a plan):
 
 ---
 
-*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.13.0.*
+*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.14.0.*
