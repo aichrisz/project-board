@@ -44,6 +44,7 @@ import {
   type WorkspaceSyncState,
 } from '../lib/remoteWorkspace';
 import { applyTheme } from '../lib/theme';
+import { updateBlockerNote, type BlockerNoteResult } from '../lib/blocker';
 import type {
   ActivityEvent,
   ActiveFocusSession,
@@ -82,6 +83,8 @@ export type ProjectInput = {
   stack?: string[];
 };
 
+type BlockerMutationResult = BlockerNoteResult | { kind: 'missing' | 'not-ready' };
+
 type ProjectContextValue = {
   projects: Project[];
   settings: AppSettings;
@@ -91,6 +94,7 @@ type ProjectContextValue = {
   reloadRequired: boolean;
   remotePersistenceError: string | null;
   getProject: (id: string) => Project | undefined;
+  updateBlocker: (id: string, text: string | null) => BlockerMutationResult;
   createProject: (input: ProjectInput) => Project;
   updateProject: (id: string, patch: Partial<Project>) => void;
   deleteProject: (id: string) => void;
@@ -415,6 +419,38 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const getProject = useCallback(
     (id: string) => projects.find((p) => p.id === id),
     [projects],
+  );
+
+  const updateBlocker = useCallback(
+    (id: string, text: string | null): BlockerMutationResult => {
+      if (!ready) return { kind: 'not-ready' };
+      const current = projectsRef.current.find((project) => project.id === id);
+      if (!current) return { kind: 'missing' };
+
+      const result = updateBlockerNote(current, text);
+      if (result.kind !== 'changed') return result;
+
+      const updatedProject = {
+        ...current,
+        notes_md: result.notes,
+        updated_at: nowIso(),
+      };
+      const nextProjects = projectsRef.current.map((project) =>
+        project.id === id ? updatedProject : project,
+      );
+      commitProjectSnapshot(nextProjects, focusRef.current);
+      pushActivity(
+        makeActivity(
+          'project_updated',
+          text === null
+            ? `Cleared blocker on “${current.title}”`
+            : `Updated blocker on “${current.title}”`,
+          id,
+        ),
+      );
+      return result;
+    },
+    [commitProjectSnapshot, pushActivity, ready],
   );
 
   const applyFocusTransition = useCallback(
@@ -1018,6 +1054,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       reloadRequired,
       remotePersistenceError,
       getProject,
+      updateBlocker,
       createProject,
       updateProject,
       deleteProject,
@@ -1051,6 +1088,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       reloadRequired,
       remotePersistenceError,
       getProject,
+      updateBlocker,
       createProject,
       updateProject,
       deleteProject,
