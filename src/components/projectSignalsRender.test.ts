@@ -6,7 +6,10 @@ import { createElement, type ComponentType } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
 import { createServer, type ViteDevServer } from 'vite';
+import type { BlockerNoteResult } from '../lib/blocker';
 import type { ActivityEvent, Project } from '../types';
+
+type BlockerUpdateResult = BlockerNoteResult | { kind: 'missing' | 'not-ready' };
 
 const initialTimezone = process.env.TZ;
 
@@ -70,6 +73,7 @@ const dashboardContextSource = `
       focus: { active: null },
       setShowCompleted: () => {},
       updateProject: () => {},
+      updateBlocker: () => ({ kind: 'noop', notes: '' }),
       addStep: () => {},
       duplicateProject: () => undefined,
       exportData: () => {},
@@ -98,7 +102,7 @@ let viteServer: ViteDevServer | undefined;
 before(async () => {
   viteServer = await createServer({
     configFile: fileURLToPath(new URL('../../vite.config.ts', import.meta.url)),
-    server: { middlewareMode: true },
+    server: { middlewareMode: true, ws: false },
     appType: 'custom',
     plugins: [
       {
@@ -143,6 +147,20 @@ after(async () => {
 });
 
 describe('project signal component rendering', () => {
+  it('uses project-independent IDs for blocker editor labeling and errors', () => {
+    const source = readFileSync(new URL('./ProjectCard.tsx', import.meta.url), 'utf8');
+
+    assert.match(source, /const blockerEditorId = useId\(\);/);
+    assert.match(source, /htmlFor=\{`\$\{blockerEditorId\}-input`\}/);
+    assert.match(source, /id=\{`\$\{blockerEditorId\}-input`\}/);
+    assert.match(
+      source,
+      /aria-describedby=\{blockerError \? `\$\{blockerEditorId\}-error` : undefined\}/,
+    );
+    assert.match(source, /<p id=\{`\$\{blockerEditorId\}-error`\}/);
+    assert.doesNotMatch(source, /project-blocker-opener-\$\{project\.id\}/);
+  });
+
   it('renders ProjectCard next action and freshness signals', async () => {
     const module = await viteServer!.ssrLoadModule('/src/components/ProjectCard.tsx');
     const ProjectCard = module.ProjectCard as ComponentType<{
@@ -150,6 +168,10 @@ describe('project signal component rendering', () => {
       idleDays: number;
       onToggleStar: (id: string) => void;
       onAddStep: (projectId: string, title: string) => void;
+      onUpdateBlocker: (
+        projectId: string,
+        text: string | null,
+      ) => BlockerUpdateResult;
       onArchive: (id: string) => void;
     }>;
     const markup = renderToStaticMarkup(
@@ -161,6 +183,7 @@ describe('project signal component rendering', () => {
           idleDays: 14,
           onToggleStar: () => {},
           onAddStep: () => {},
+          onUpdateBlocker: () => ({ kind: 'noop' as const, notes: '' }),
           onArchive: () => {},
         }),
       ),
@@ -170,6 +193,75 @@ describe('project signal component rendering', () => {
     assert.match(markup, /Next action/);
     assert.match(markup, /class="card-next-action-value">Next task<\/span>/);
     assert.match(markup, /class="card-freshness">Review<\/span>/);
+  });
+
+  it('renders ProjectCard blocker text and labeled editor control', async () => {
+    const module = await viteServer!.ssrLoadModule('/src/components/ProjectCard.tsx');
+    const ProjectCard = module.ProjectCard as ComponentType<{
+      project: Project;
+      idleDays: number;
+      onToggleStar: (id: string) => void;
+      onAddStep: (projectId: string, title: string) => void;
+      onUpdateBlocker: (
+        projectId: string,
+        text: string | null,
+      ) => BlockerUpdateResult;
+      onArchive: (id: string) => void;
+    }>;
+    const markup = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(ProjectCard, {
+          project: makeProject({
+            steps: [],
+            updated_at: new Date().toISOString(),
+            notes_md: 'Blocker: Waiting for review',
+          }),
+          idleDays: 14,
+          onToggleStar: () => {},
+          onAddStep: () => {},
+          onUpdateBlocker: () => ({ kind: 'noop' as const, notes: '' }),
+          onArchive: () => {},
+        }),
+      ),
+    );
+
+    assert.match(markup, /class="card-blocker-value">Waiting for review<\/span>/);
+    assert.doesNotMatch(markup, /class="card-next-action"|class="card-freshness"/);
+    assert.match(markup, /<button[^>]*>Blocker<\/button>/);
+  });
+
+  it('keeps blocker editor closed in default card rendering', async () => {
+    const module = await viteServer!.ssrLoadModule('/src/components/ProjectCard.tsx');
+    const ProjectCard = module.ProjectCard as ComponentType<{
+      project: Project;
+      idleDays: number;
+      onToggleStar: (id: string) => void;
+      onAddStep: (projectId: string, title: string) => void;
+      onUpdateBlocker: (
+        projectId: string,
+        text: string | null,
+      ) => BlockerUpdateResult;
+      onArchive: (id: string) => void;
+    }>;
+    const markup = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(ProjectCard, {
+          project: makeProject(),
+          idleDays: 14,
+          onToggleStar: () => {},
+          onAddStep: () => {},
+          onUpdateBlocker: () => ({ kind: 'noop' as const, notes: '' }),
+          onArchive: () => {},
+        }),
+      ),
+    );
+
+    assert.doesNotMatch(markup, /class="card-blocker-editor"/);
+    assert.match(markup, /class="card-next-action"/);
   });
 
   it('renders Review active-project advisory content', async () => {

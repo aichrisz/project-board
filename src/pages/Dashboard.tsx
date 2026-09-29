@@ -67,6 +67,7 @@ export function Dashboard() {
     setShowCompleted,
     ready,
     updateProject,
+    updateBlocker,
     addStep,
     duplicateProject,
     exportData,
@@ -523,6 +524,7 @@ export function Dashboard() {
                   idleDays={settings.idleDays}
                   onToggleStar={onToggleStar}
                   onAddStep={addStep}
+                  onUpdateBlocker={updateBlocker}
                   onArchive={onArchive}
                   onDuplicate={onDuplicate}
                   onStartFocus={openFocusDrawer}

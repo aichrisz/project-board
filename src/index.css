@@ -3129,6 +3129,71 @@ a.link-chip-main:hover {
   overflow-wrap: anywhere;
 }
 
+.card-blocker {
+  display: flex;
+  align-items: baseline;
+  gap: var(--pb-space-8);
+  max-width: 100%;
+  min-width: 0;
+  line-height: var(--pb-font-body-line);
+}
+
+.card-blocker-value {
+  min-width: 0;
+  color: var(--pb-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.card-blocker-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+}
+
+.card-blocker-editor label {
+  flex: 0 0 100%;
+  color: var(--pb-text-muted);
+  font-size: var(--pb-font-meta);
+  font-weight: var(--pb-font-meta-weight);
+}
+
+.card-blocker-editor input {
+  flex: 1 1 120px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid var(--pb-line);
+  border-radius: var(--pb-radius-sm);
+  background: var(--pb-surface-base);
+  color: var(--pb-text);
+}
+
+.card-blocker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.card-blocker-editor .btn {
+  min-height: 44px;
+}
+
+.card-blocker-open {
+  min-height: 44px;
+}
+
+.card-blocker-error {
+  flex: 0 0 100%;
+  margin: 0;
+  color: var(--pb-signal-danger);
+  overflow-wrap: anywhere;
+}
+
 .card-freshness {
   display: inline-flex;
   max-width: 100%;
