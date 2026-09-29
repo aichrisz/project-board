@@ -4,7 +4,7 @@ A **local-first** personal project inventory dashboard. Track status, progress, 
 
 - **Product name:** Project Board  
 - **Stack:** Vite + React + TypeScript  
-- **Version:** 0.14.0
+- **Version:** 0.15.0
 - **Storage:** authenticated-owner SQLite workspace with browser `localStorage` offline cache
 - **UI language:** English  
 
@@ -38,6 +38,24 @@ The v0.9 accessibility contracts remain in force: the mobile menu and `?` dialog
 retain their shared focus lifecycle, Board-owned keys are claimed before action
 resolution, and the narrow Board hint is static, real-overflow-gated,
 non-focusable, session-only, and never persisted.
+
+## Quick blocker updates & preview ownership (v0.15)
+
+Dashboard project cards show the current blocker and provide a `Blocker` editor
+with `Save`, `Cancel`, and conditional `Clear` actions. Saves trim text and
+append `Blocker: <text>` to project notes; Clear appends `Blocker: none`. Earlier
+notes remain as history, and blocker edits never change project status. Input
+must be nonblank, single-line, at most 2,000 trimmed characters, and cannot be
+`none` or `none.` (case-insensitive); total notes remain limited to 200,000
+characters. Unchanged saves and Clear without a current blocker do nothing and
+create no activity. Accepted updates emit one `project_updated` event and use
+the existing workspace synchronization path; local UI does not imply remote
+acknowledgment.
+
+CLI `complete-step` dry-run previews resolve project ownership from the explicit
+target, including canonical and alias commands with padded project IDs. When
+projects share a step ID, text names the target and simulated JSON applies the
+update to that target; preview remains dry-run and sends no PUT.
 
 ## Guided Brief & CLI mutation previews (v0.14)
 

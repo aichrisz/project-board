@@ -2,6 +2,30 @@
 
 All notable changes to Project Board. Local-first single-owner app; dates are UTC.
 
+## 0.15.0 — Quick blocker updates (2026-09-30)
+
+### Added
+
+- **Dashboard blocker editor.** Project cards show the current blocker and
+  provide Save, Cancel, and conditional Clear actions. Saves append trimmed
+  `Blocker: <text>` notes; Clear appends `Blocker: none`. Earlier notes remain
+  history, blocker changes do not change status, and accepted updates emit one
+  `project_updated` activity event. Unchanged saves and clearing an absent
+  blocker are no-ops with no activity.
+- **Bounded blocker input.** Rejects blank, multiline, over-2,000-character,
+  and case-insensitive `none` / `none.` input. Appended notes remain subject to
+  the existing 200,000-character limit.
+- **Targeted CLI previews.** `complete-step` dry runs use the explicit project
+  target when duplicate step IDs exist. Canonical and alias commands handle
+  padded project IDs; text names the target, simulated JSON updates that target,
+  and previews do not PUT.
+
+### Unchanged
+
+- Workspace and export schema remains `version: 1`; no dependency, route, or
+  stored field was added. Existing workspace synchronization and conflict
+  behavior remain in place; local UI is not remote persistence acknowledgment.
+
 ## 0.14.0 — Guided Brief & mutation previews (2026-09-28)
 
 ### Added

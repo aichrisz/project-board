@@ -3,9 +3,9 @@
 **Document type:** Portable product specification  
 **Audience:** Any AI or engineer implementing, reviewing, or extending the app  
 **Product name:** Project Board  
-**Current documented version:** 0.14.0 (Guided Brief & mutation previews)\
-**Current shipped capability:** all features through **v0.14.0**; visible runtime version chrome and package metadata are synchronized at **v0.14.0**\
-**Last updated:** 2026-09-28
+**Current documented version:** 0.15.0 (Quick blocker updates)\
+**Current shipped capability:** all features through **v0.15.0**; visible runtime version chrome and package metadata are synchronized at **v0.15.0**\
+**Last updated:** 2026-09-30
 
 This document is **self-contained**. It describes *what the product is* and *what features exist*. It does **not** depend on a specific host, owner name, or agent toolchain.
 
@@ -193,7 +193,7 @@ grades, or recommendations.
 ## 6. Feature inventory by version
 
 Use this as a capability checklist. Versions are incremental; **current documented
-ship = all rows through 0.14.0**. Version 0.8.2 added no product features
+ship = all rows through 0.15.0**. Version 0.8.2 added no product features
 (documentation and release metadata only).
 
 ### 6.1 v0.1 — MVP
@@ -363,7 +363,7 @@ horizontal scroll behavior are preserved.
    recommendations.
 
 **Version boundary:** v0.11.0 describes the Focus Session feature set. The
-current v0.14.0 release metadata is documented below; application semver and
+current v0.15.0 release metadata is documented below; application semver and
 the existing workspace document schema version `1` remain independent. No new
 dependency, storage key, route, keyboard shortcut, telemetry, analytics,
 notification, or network behavior was added. The existing v0.9 accessibility and
@@ -447,6 +447,34 @@ v0.10 visual contracts remain in force.
    spec identify **v0.14.0**. Workspace/export schema remains `version: 1`, and
    no dependency was added.
 
+### 6.15 v0.15 — Quick blocker updates
+
+1. **Dashboard blocker editor** — project cards show the current blocker and
+   expose a `Blocker` control with a labeled single-line input and `Save`,
+   `Cancel`, and conditional `Clear` actions. The blocker editor and step-add
+   editor do not appear together; focus enters the input and returns to the
+   opener when the editor closes.
+2. **Append-only notes** — Save trims and appends `Blocker: <text>`; Clear
+   appends exactly `Blocker: none`. Earlier notes remain as history, and no
+   blocker action changes project status. Blank, multiline, over-2,000-character,
+   and case-insensitive `none` / `none.` values are rejected. Appends honor the
+   200,000-character total-notes limit.
+3. **No-op and synchronization behavior** — unchanged Save and Clear without a
+   current blocker produce no project update or activity. Accepted Save and
+   Clear produce one `project_updated` event through the existing workspace
+   synchronization path. Local UI state is not remote persistence
+   acknowledgment; existing synchronization errors and conflict behavior remain
+   authoritative.
+4. **CLI preview ownership** — `complete-step` dry-run preview ownership comes
+   from the explicit project target, not the first project containing a shared
+   step ID. Canonical and alias forms handle padded project IDs; preview text
+   names the target, simulated JSON updates that target, and neither sends a
+   PUT.
+5. **Release boundary** — package metadata, both root versions in
+   `package-lock.json`, `src/version.ts`, README, changelog, and this portable
+   spec identify **v0.15.0**. Workspace and export schema remain `version: 1`;
+   no dependency, route, or stored field was added.
+
 ---
 
 ## 7. Cross-cutting behaviors
@@ -515,7 +543,7 @@ src/
 
 ## 10. Acceptance / verify checklist (current product)
 
-An implementation is “feature-complete for 0.14” if:
+An implementation is “feature-complete for 0.15” if:
 
 - [ ] `npm run build` succeeds  
 - [ ] Create/edit/delete project works and survives reload  
@@ -528,7 +556,7 @@ An implementation is “feature-complete for 0.14” if:
 - [ ] Focus chip + URL work  
 - [ ] Duplicate creates idea copy with unchecked steps  
 - [ ] Link chips safe for http(s) / path-like  
-- [x] Footer/chrome and package metadata are synchronized at **v0.14.0**
+- [x] Footer/chrome and package metadata are synchronized at **v0.15.0**
 - [ ] Kei CLI uses the default loopback API and accepts an explicit owner
 - [ ] `set-blocker`, `clear-blocker`, `add-milestone`, and `set-next` validate
       input and emit `project_updated`; `set-next` directs to `add-step` when
@@ -540,6 +568,10 @@ An implementation is “feature-complete for 0.14” if:
 - [ ] CLI `--dry-run` previews every mutation without PUT; default text is
       terminal-safe and `--format json` preserves the full simulated workspace
 - [ ] Preview ETags describe one source revision and do not reserve a later write
+- [ ] Dashboard blocker Save/Clear append-only notes, preserve status/history,
+      enforce input/notes limits, and create no activity for no-op actions
+- [ ] `complete-step` dry-run previews identify explicit project targets with
+      duplicate step IDs for canonical and alias forms, including padded IDs
 - [ ] Workspace and export schema remains `version: 1`
 - [ ] Import rejects malformed, unsafe, or oversized files with a plain-language message
 - [ ] `/review` weekly review works  
@@ -575,7 +607,7 @@ Possible later themes (only if product owner approves a plan):
 
 1. Treat **§2 principles** as hard constraints.  
 2. Treat **§6** as the feature backlog already shipped (do not re-propose v0.1–v0.5 as “new” unless fixing bugs).  
-3. For new work: propose a **post-v0.14 plan** against gaps only; keep the offline cache, authenticated owner workspace, and CLI concurrency contract aligned.
+3. For new work: propose a **post-v0.15 plan** against gaps only; keep the offline cache, authenticated owner workspace, and CLI concurrency contract aligned.
 4. Prefer small, versioned increments with verify via `npm run build` + manual smoke of routes above.  
 5. Keep UI English and product name **Project Board**.  
 
@@ -594,4 +626,4 @@ Possible later themes (only if product owner approves a plan):
 
 ---
 
-*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.14.0.*
+*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.15.0.*
