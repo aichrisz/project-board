@@ -25,4 +25,4 @@ Use existing test tooling: focused regression checks for append-only blocker sem
 
 ## Scope exclusions
 
-No next-action completion shortcut in this release, no Board card redesign, no automatic status changes, no bulk blocker edits, no new persistence fields. Implementation lane: existing Flatkey setup, with no credentials copied into files or outputs.
+No next-action completion shortcut in this release, no Board card redesign, no automatic status changes, no bulk blocker edits, no new persistence fields. Implementation lane: Codex via 9Router code-lane at https://9r.aichrisz.com/v1, with no credentials copied into files or outputs.
