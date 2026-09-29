@@ -467,6 +467,52 @@ describe('Kei project board CLI', () => {
     });
   });
 
+  it('keeps duplicate step preview ownership scoped to the target project', async () => {
+    await withApp(async (url) => {
+      const first = json(await runCli(['add-project', '--title', 'First owner'], url));
+      const target = json(await runCli(['add-project', '--title', 'Target 2'], url));
+      const loaded = await loadWorkspace(url);
+      const source = loaded.workspace;
+      source.projects = [
+        { ...source.projects.find((project) => project.id === first.id), steps: [{ id: 'shared-step', title: 'First step', done: false, order: 1 }], progress_pct: 0 },
+        { ...source.projects.find((project) => project.id === target.id), steps: [{ id: 'shared-step', title: 'Target step', done: false, order: 1 }], progress_pct: 0 },
+      ];
+      assert.equal((await putWorkspace(url, source, loaded.etag)).status, 204);
+      const baseline = await loadWorkspace(url);
+
+      await withProxy(url, null, async (proxyUrl, putCount) => {
+        const paddedTargetId = ` ${target.id} `;
+        const text = await runCli(['--dry-run', 'complete-step', paddedTargetId, 'shared-step'], proxyUrl);
+        assert.equal(text.code, 0, text.stderr);
+        assert.match(text.stdout, /^Project: Target 2$/m);
+        assert.ok(text.stdout.includes(`ETag: ${baseline.etag}`));
+        assert.equal(putCount(), 0);
+
+        const aliasText = await runCli(['--dry-run', 'complete', 'step', paddedTargetId, 'shared-step'], proxyUrl);
+        assert.equal(aliasText.code, 0, aliasText.stderr);
+        assert.match(aliasText.stdout, /^Project: Target 2$/m);
+        assert.ok(aliasText.stdout.includes(`ETag: ${baseline.etag}`));
+        assert.equal(putCount(), 0);
+
+        const alias = await runCli(['--dry-run', '--format', 'json', 'complete', 'step', paddedTargetId, 'shared-step'], proxyUrl);
+        assert.equal(alias.code, 0, alias.stderr);
+        const envelope = JSON.parse(alias.stdout);
+        assert.equal(envelope.etag, baseline.etag);
+        const simulatedFirst = envelope.workspace.projects.find((project) => project.id === first.id);
+        const simulatedTarget = envelope.workspace.projects.find((project) => project.id === target.id);
+        assert.equal(simulatedFirst.steps[0].done, false);
+        assert.equal(simulatedTarget.steps[0].done, true);
+        assert.equal(envelope.workspace.activity[0].type, 'step_toggled');
+        assert.equal(envelope.workspace.activity[0].projectId, target.id);
+        assert.equal(putCount(), 0);
+      });
+
+      const after = await loadWorkspace(url);
+      assert.equal(after.etag, baseline.etag);
+      assert.deepEqual(after.workspace, baseline.workspace);
+    });
+  });
+
   it('summarizes a multiline milestone in the dry-run text preview', async () => {
     await withApp(async (url) => {
       const project = json(await runCli(['add-project', '--title', 'Multiline milestone'], url));

@@ -405,7 +405,9 @@ function describeCommand(positionals) {
   if (command === 'add-project' || (command === 'add' && positionals[1] === 'project')) return { name: 'add-project', mutating: true };
   if (command === 'set-status' || (command === 'set' && positionals[1] === 'project' && positionals[2] === 'status')) return { name: 'set-status', mutating: true };
   if (command === 'add-step' || (command === 'add' && positionals[1] === 'step')) return { name: 'add-step', mutating: true };
-  if (command === 'complete-step' || (command === 'complete' && positionals[1] === 'step')) return { name: 'complete-step', mutating: true };
+  if (command === 'complete-step' || (command === 'complete' && positionals[1] === 'step')) {
+    return { name: 'complete-step', mutating: true, projectId: positionals[command === 'complete-step' ? 1 : 2] };
+  }
   if (command === 'set-blocker') return { name: 'set-blocker', mutating: true };
   if (command === 'clear-blocker') return { name: 'clear-blocker', mutating: true };
   if (command === 'add-milestone') return { name: 'add-milestone', mutating: true };
@@ -457,7 +459,12 @@ function quoted(value) {
   return value === null || value === undefined ? 'none' : `"${previewLine(value)}"`;
 }
 
-function previewProject(beforeWorkspace, afterWorkspace, result) {
+function previewProject(beforeWorkspace, afterWorkspace, result, command, targetProjectId) {
+  if (command === 'complete-step') {
+    return beforeWorkspace.projects.find((project) => project.id === targetProjectId)
+      ?? afterWorkspace.projects.find((project) => project.id === targetProjectId)
+      ?? null;
+  }
   if (result.steps) {
     return beforeWorkspace.projects.find((project) => project.id === result.id)
       ?? afterWorkspace.projects.find((project) => project.id === result.id)
@@ -466,8 +473,8 @@ function previewProject(beforeWorkspace, afterWorkspace, result) {
   return ownerProject(beforeWorkspace, result.id) ?? ownerProject(afterWorkspace, result.id) ?? null;
 }
 
-function previewText(command, beforeWorkspace, afterWorkspace, result, etag) {
-  const project = previewProject(beforeWorkspace, afterWorkspace, result);
+function previewText(command, beforeWorkspace, afterWorkspace, result, etag, targetProjectId) {
+  const project = previewProject(beforeWorkspace, afterWorkspace, result, command, targetProjectId);
   const title = previewLine(project?.title ?? result.title);
   const lines = ['Dry run — no changes written', `Project: ${title}`];
 
@@ -504,12 +511,15 @@ function previewText(command, beforeWorkspace, afterWorkspace, result, etag) {
   return lines.join('\n');
 }
 
-function simulateCommand(workspace, positionals, options, command, etag) {
+function simulateCommand(workspace, positionals, options, descriptor, etag) {
   const clone = structuredClone(workspace);
   const result = executeCommand(clone, positionals, options);
+  const targetProjectId = descriptor.name === 'complete-step'
+    ? requireBoundedId(descriptor.projectId, 'project id')
+    : undefined;
   return {
-    preview: { dryRun: true, etag, command, result, workspace: clone },
-    text: previewText(command, workspace, clone, result, etag),
+    preview: { dryRun: true, etag, command: descriptor.name, result, workspace: clone },
+    text: previewText(descriptor.name, workspace, clone, result, etag, targetProjectId),
   };
 }
 
@@ -526,7 +536,7 @@ export async function run(argv, { env = process.env, fetcher = fetch } = {}) {
   const config = resolveConfig(options, env);
   const { workspace, etag } = await getWorkspace(config, fetcher);
   if (dryRun && descriptor && descriptor.mutating) {
-    const { preview, text } = simulateCommand(workspace, positionals, options, descriptor.name, etag);
+    const { preview, text } = simulateCommand(workspace, positionals, options, descriptor, etag);
     return { dryRun: true, format, preview, text };
   }
   const result = executeCommand(workspace, positionals, options);
