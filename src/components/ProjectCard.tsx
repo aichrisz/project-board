@@ -233,7 +233,7 @@ export function ProjectCard({
                 setBlockerError(null);
               }}
               onPaste={(event) => {
-                if (/[\r\n]/.test(event.clipboardData.getData('text'))) {
+                if (/[\r\n\u2028\u2029]/.test(event.clipboardData.getData('text'))) {
                   event.preventDefault();
                   setBlockerError('Blocker must fit on one line.');
                 }

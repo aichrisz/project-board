@@ -22,7 +22,7 @@ export function updateBlockerNote(
     return appendBlockerLine(project.notes_md, 'Blocker: none');
   }
 
-  if (/[\r\n]/.test(text)) return { kind: 'error', reason: 'line-break' };
+  if (/[\r\n\u2028\u2029]/.test(text)) return { kind: 'error', reason: 'line-break' };
   const trimmedText = text.trim();
   if (!trimmedText) return { kind: 'error', reason: 'required' };
   if (/^none\.?$/i.test(trimmedText)) return { kind: 'error', reason: 'reserved' };

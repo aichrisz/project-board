@@ -54,6 +54,8 @@ describe('blocker note policy', () => {
       { text: 'Blocker\nnext', reason: 'line-break' },
       { text: 'Blocker\rnext', reason: 'line-break' },
       { text: 'Blocker\n', reason: 'line-break' },
+      { text: 'Blocker\u2028next', reason: 'line-break' },
+      { text: 'Blocker\u2029next', reason: 'line-break' },
       { text: 'none', reason: 'reserved' },
       { text: ' NONE. ', reason: 'reserved' },
       { text: 'x'.repeat(2001), reason: 'too-long' },
