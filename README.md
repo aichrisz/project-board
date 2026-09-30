@@ -4,7 +4,7 @@ A **local-first** personal project inventory dashboard. Track status, progress, 
 
 - **Product name:** Project Board  
 - **Stack:** Vite + React + TypeScript  
-- **Version:** 0.15.0
+- **Version:** 0.15.1
 - **Storage:** authenticated-owner SQLite workspace with browser `localStorage` offline cache
 - **UI language:** English  
 
@@ -56,6 +56,20 @@ CLI `complete-step` dry-run previews resolve project ownership from the explicit
 target, including canonical and alias commands with padded project IDs. When
 projects share a step ID, text names the target and simulated JSON applies the
 update to that target; preview remains dry-run and sends no PUT.
+
+## Workspace persistence recovery (v0.15.1)
+
+Browser saves journal the pending schema-1 workspace digest and captured ETag
+before sending a remote write. After refresh or a failed save, reload checks
+whether the remote already contains that exact workspace. If not, it retries
+only when the remote ETag still matches the captured base revision. A changed
+revision or an invalid journal preserves local data and surfaces a conflict;
+HTTP `412` is never blindly retried or overwritten. A local edit is not remote
+save acknowledgment: acknowledgment depends on the server response.
+
+Workspace ETags are owner-scoped, and workspace API responses use `no-store`.
+The canonical workspace schema remains `version: 1`, and its storage key stays
+unchanged.
 
 ## Guided Brief & CLI mutation previews (v0.14)
 
@@ -218,6 +232,9 @@ The production server stores one workspace per authenticated owner in SQLite and
 serves the built app from loopback. Cloudflare Access supplies the authenticated
 owner identity and isolates workspaces. The browser `localStorage` data remains
 an offline cache and the existing JSON import/export remains available.
+SQLite stores owner-identity protocol metadata in `workspace_owner_scopes`; the
+workspace and export schemas remain `version: 1`. Back up the production database
+before deploying v0.15.1.
 
 ```bash
 bash deploy/check.sh

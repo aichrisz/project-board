@@ -32,12 +32,19 @@ import {
 import { isIdle } from '../lib/health';
 import { createId, slugify } from '../lib/id';
 import { withAutoProgress } from '../lib/progress';
-import { loadStorage, migrateProject, saveStorage } from '../lib/storage';
+import {
+  loadStorage,
+  migrateProject,
+  saveStorage,
+} from '../lib/storage';
 import {
   CREATION_ETAG,
   hydrateRemoteWorkspace,
+  isHydratedWorkspaceCurrent,
   queueRemoteWorkspaceSave,
   REMOTE_HYDRATION_FAILURE,
+  REMOTE_PRIVATE_CACHE_CONFLICT,
+  REMOTE_RECOVERY_CONFLICT,
   REMOTE_SAVE_FAILURE,
   WorkspaceConflictError,
   type RemoteWorkspace,
@@ -210,7 +217,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const remoteRevisionRef = useRef<WorkspaceSyncState>({
     etag: CREATION_ETAG,
     blocked: false,
+    ownerScopeToken: '',
   });
+  const ownerScopeRef = useRef<string | null>(null);
   const remoteBaselineRef = useRef<string | null>(null);
   const remotePendingRef = useRef<string | null>(null);
   const projectsRef = useRef(projects);
@@ -241,12 +250,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
+  const persistActivity = useCallback((events: ActivityEvent[]) => {
+    if (remoteSyncRef.current !== 'ready' || ownerScopeRef.current === null) return;
+    saveActivity(events, ownerScopeRef.current);
+  }, []);
+
   const pushActivity = useCallback((event: ActivityEvent) => {
     const next = prependActivity(activityRef.current, event);
     activityRef.current = next;
     setActivity(next);
-    saveActivity(next);
-  }, []);
+    persistActivity(next);
+  }, [persistActivity]);
 
   const focusActivityMessage = useCallback(
     (descriptor: Extract<FocusEventDescriptor, { kind: 'focus_session' }>, events: readonly FocusEventDescriptor[]) => {
@@ -299,9 +313,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const next = prependActivityEvents(activityRef.current, activityEvents);
       activityRef.current = next;
       setActivity(next);
-      saveActivity(next);
+      persistActivity(next);
     },
-    [focusActivityMessage],
+    [focusActivityMessage, persistActivity],
   );
 
   const commitProjectSnapshot = useCallback(
@@ -316,24 +330,26 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    const stored = loadStorage();
-    const hydratedProjects = stored
-      ? stored.projects.map(normalizeProject)
-      : [];
-    const hydratedFocus = hydrateFocusState({
-      raw: stored?.focus,
-      hydratedProjects,
-    });
-    const hydratedActivity = loadActivity();
-    const hydratedSettings = stored
-      ? { ...DEFAULT_SETTINGS, ...stored.settings }
-      : DEFAULT_SETTINGS;
-    const localWorkspace = makeRemoteWorkspace(
-      hydratedProjects,
-      hydratedSettings,
-      hydratedFocus,
-      hydratedActivity,
-    );
+    const localWorkspace = () => {
+      const stored = loadStorage();
+      const hydratedProjects = stored
+        ? stored.projects.map(normalizeProject)
+        : [];
+      const hydratedFocus = hydrateFocusState({
+        raw: stored?.focus,
+        hydratedProjects,
+      });
+      const hydratedActivity = loadActivity();
+      const hydratedSettings = stored
+        ? { ...DEFAULT_SETTINGS, ...stored.settings }
+        : DEFAULT_SETTINGS;
+      return makeRemoteWorkspace(
+        hydratedProjects,
+        hydratedSettings,
+        hydratedFocus,
+        hydratedActivity,
+      );
+    };
     const applySnapshot = (snapshot: RemoteWorkspace) => {
       projectsRef.current = snapshot.projects;
       focusRef.current = snapshot.focus ?? DEFAULT_FOCUS_STATE;
@@ -348,6 +364,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     void hydrateRemoteWorkspace(localWorkspace)
       .then((hydrated) => {
         if (!mounted) return;
+        if (!isHydratedWorkspaceCurrent(hydrated)) {
+          ownerScopeRef.current = null;
+          remoteSyncRef.current = 'failed';
+          setReloadRequired(true);
+          setRemotePersistenceError(REMOTE_HYDRATION_FAILURE);
+          setRemoteReady(true);
+          setReady(true);
+          return;
+        }
         const snapshot =
           hydrated.status === 'ready' && !hydrated.shouldSave
             ? (() => {
@@ -364,7 +389,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
               })()
             : hydrated.workspace;
         applySnapshot(snapshot);
-        remoteRevisionRef.current = { etag: hydrated.revision, blocked: false };
+        ownerScopeRef.current = hydrated.ownerScopeToken ?? null;
+        remoteRevisionRef.current = {
+          etag: hydrated.revision,
+          blocked: false,
+          ownerScopeToken: hydrated.ownerScopeToken ?? '',
+        };
         remoteBaselineRef.current =
           hydrated.status === 'ready' && !hydrated.shouldSave
             ? workspaceKey(snapshot)
@@ -372,13 +402,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         remotePendingRef.current = null;
         if (hydrated.reloadRequired) {
           setReloadRequired(true);
-          setRemotePersistenceError(REMOTE_HYDRATION_FAILURE);
+          setRemotePersistenceError(
+            hydrated.privateCachePreserved
+              ? REMOTE_PRIVATE_CACHE_CONFLICT
+              : hydrated.recoveryConflict
+                ? REMOTE_RECOVERY_CONFLICT
+                : REMOTE_HYDRATION_FAILURE,
+          );
         }
-        if (hydrated.shouldSave) {
+        if (hydrated.status === 'ready' && hydrated.shouldSave) {
           saveRemoteWorkspace(snapshot);
         }
-        saveActivity(snapshot.activity);
         remoteSyncRef.current = hydrated.status;
+        if (hydrated.status === 'ready') {
+          persistActivity(snapshot.activity);
+        }
         setRemoteReady(true);
         setReady(true);
       });
@@ -386,12 +424,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false;
     };
-  }, [saveRemoteWorkspace]);
+  }, [persistActivity, saveRemoteWorkspace]);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || remoteSyncRef.current !== 'ready') return;
     const blob: StorageBlob = { version: 1, projects, settings, focus };
-    saveStorage(blob);
+    if (ownerScopeRef.current === null) return;
+    saveStorage(blob, ownerScopeRef.current);
   }, [projects, settings, focus, ready]);
 
   useEffect(() => {

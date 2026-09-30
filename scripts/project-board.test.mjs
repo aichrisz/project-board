@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -11,7 +12,7 @@ import { describe, it } from 'node:test';
 const CLI = join(process.cwd(), 'scripts', 'project-board.mjs');
 const OWNER = 'kei@example.com';
 const IDENTITY = 'Cf-Access-Authenticated-User-Email';
-const CREATION_ETAG = '"workspace-missing"';
+const CREATION_ETAG = `"workspace-missing-${createHash('sha256').update(OWNER).digest('hex')}"`;
 const MAX_NOTES_CHARS = 200_000;
 
 async function withApp(callback) {
@@ -74,25 +75,34 @@ async function loadWorkspace(url) {
   assert.ok(response.status === 200 || response.status === 204);
   return {
     etag: response.headers.get('etag'),
+    ownerScopeToken: response.headers.get('x-workspace-owner-scope'),
     workspace: response.status === 204 ? null : await response.json(),
   };
 }
 
-async function putWorkspace(url, workspace, etag) {
+async function putWorkspace(url, workspace, etag, ownerScopeToken) {
+  assert.ok(ownerScopeToken, 'workspace PUT fixture requires owner scope from GET');
   return fetch(`${url}/api/workspace`, {
     method: 'PUT',
-    headers: { ...identity(), 'content-type': 'application/json', 'if-match': etag },
+    headers: {
+      ...identity(),
+      'content-type': 'application/json',
+      'if-match': etag,
+      'x-workspace-owner-scope': ownerScopeToken,
+    },
     body: JSON.stringify(workspace),
   });
 }
 
-async function withProxy(baseUrl, beforePut, callback) {
+async function withProxy(baseUrl, beforePut, callback, { ownerScopeOnGet } = {}) {
   let putCount = 0;
+  const putOwnerScopes = [];
   const proxy = createServer(async (request, response) => {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
     if (request.method === 'PUT') {
       putCount += 1;
+      putOwnerScopes.push(request.headers['x-workspace-owner-scope']);
       if (beforePut) await beforePut();
     }
     const upstream = await fetch(`${baseUrl}${request.url}`, {
@@ -101,18 +111,27 @@ async function withProxy(baseUrl, beforePut, callback) {
         [IDENTITY]: OWNER,
         'content-type': request.headers['content-type'] ?? 'application/json',
         ...(request.headers['if-match'] ? { 'if-match': request.headers['if-match'] } : {}),
+        ...(request.headers['x-workspace-owner-scope']
+          ? { 'x-workspace-owner-scope': request.headers['x-workspace-owner-scope'] }
+          : {}),
       },
       body: chunks.length === 0 ? undefined : Buffer.concat(chunks),
     });
     response.statusCode = upstream.status;
-    for (const [name, value] of upstream.headers) response.setHeader(name, value);
+    for (const [name, value] of upstream.headers) {
+      if (request.method === 'GET' && name.toLowerCase() === 'x-workspace-owner-scope' && ownerScopeOnGet !== undefined) {
+        if (ownerScopeOnGet !== null) response.setHeader(name, ownerScopeOnGet);
+      } else {
+        response.setHeader(name, value);
+      }
+    }
     response.end(Buffer.from(await upstream.arrayBuffer()));
   });
   proxy.listen(0, '127.0.0.1');
   await once(proxy, 'listening');
   const { port } = proxy.address();
   try {
-    return await callback(`http://127.0.0.1:${port}`, () => putCount);
+    return await callback(`http://127.0.0.1:${port}`, () => putCount, () => [...putOwnerScopes]);
   } finally {
     proxy.close();
     await once(proxy, 'close');
@@ -120,6 +139,53 @@ async function withProxy(baseUrl, beforePut, callback) {
 }
 
 describe('Kei project board CLI', () => {
+  it('forwards GET owner scope into PUT without exposing it in output', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'Scoped write'], url));
+      const baseline = await loadWorkspace(url);
+
+      await withProxy(url, null, async (proxyUrl, putCount, putOwnerScopes) => {
+        const result = await runCli(['set-blocker', project.id, 'scope check'], proxyUrl);
+        assert.equal(result.code, 0, result.stderr);
+        assert.equal(putCount(), 1);
+        assert.deepEqual(putOwnerScopes(), [baseline.ownerScopeToken]);
+        assert.equal(`${result.stdout}${result.stderr}`.includes(baseline.ownerScopeToken), false);
+      });
+
+      const saved = await loadWorkspace(url);
+      assert.match(saved.workspace.projects[0].notes_md, /Blocker: scope check/);
+    });
+  });
+
+  it('fails closed for missing or mismatched GET owner scope without leaking it', async () => {
+    await withApp(async (url) => {
+      const project = json(await runCli(['add-project', '--title', 'Scope guard'], url));
+      const baseline = await loadWorkspace(url);
+      const mismatchedScope = 'deliberately-mismatched-owner-scope';
+
+      await withProxy(url, null, async (proxyUrl, putCount) => {
+        const result = await runCli(['set-blocker', project.id, 'must not write'], proxyUrl);
+        assert.notEqual(result.code, 0);
+        assert.match(result.stderr, /missing owner scope/i);
+        assert.equal(putCount(), 0);
+        assert.equal(`${result.stdout}${result.stderr}`.includes(baseline.ownerScopeToken), false);
+      }, { ownerScopeOnGet: null });
+
+      await withProxy(url, null, async (proxyUrl, putCount, putOwnerScopes) => {
+        const result = await runCli(['set-blocker', project.id, 'must not write'], proxyUrl);
+        assert.notEqual(result.code, 0);
+        assert.match(result.stderr, /workspace PUT failed: 409/);
+        assert.equal(putCount(), 1);
+        assert.deepEqual(putOwnerScopes(), [mismatchedScope]);
+        assert.equal(`${result.stdout}${result.stderr}`.includes(mismatchedScope), false);
+      }, { ownerScopeOnGet: mismatchedScope });
+
+      const saved = await loadWorkspace(url);
+      assert.equal(saved.etag, baseline.etag);
+      assert.deepEqual(saved.workspace, baseline.workspace);
+    });
+  });
+
   it('accepts all project signal commands', async () => {
     await withApp(async (url) => {
       const project = json(await runCli(['add-project', '--title', 'Signal target'], url));
@@ -153,7 +219,7 @@ describe('Kei project board CLI', () => {
         { id: 'done-step', title: 'Done', done: true, order: 0 },
       ];
       seeded.progress_pct = 25;
-      assert.equal((await putWorkspace(url, current.workspace, current.etag)).status, 204);
+      assert.equal((await putWorkspace(url, current.workspace, current.etag, current.ownerScopeToken)).status, 204);
 
       let expectedNotes = ['Prior note'];
       const actions = [
@@ -206,7 +272,7 @@ describe('Kei project board CLI', () => {
       const current = await loadWorkspace(url);
       current.workspace.projects[0].steps = [{ id: 'done-step', title: 'Done', done: true, order: 1 }];
       current.workspace.projects[0].progress_pct = 100;
-      assert.equal((await putWorkspace(url, current.workspace, current.etag)).status, 204);
+      assert.equal((await putWorkspace(url, current.workspace, current.etag, current.ownerScopeToken)).status, 204);
       const before = await loadWorkspace(url);
 
       await withProxy(url, null, async (proxyUrl, putCount) => {
@@ -246,7 +312,7 @@ describe('Kei project board CLI', () => {
       const suffix = '\nBlocker: x';
       const current = await loadWorkspace(url);
       current.workspace.projects[0].notes_md = 'x'.repeat(MAX_NOTES_CHARS - suffix.length);
-      assert.equal((await putWorkspace(url, current.workspace, current.etag)).status, 204);
+      assert.equal((await putWorkspace(url, current.workspace, current.etag, current.ownerScopeToken)).status, 204);
 
       await withProxy(url, null, async (proxyUrl, putCount) => {
         const result = await runCli(['set-blocker', project.id, 'x'], proxyUrl);
@@ -259,7 +325,7 @@ describe('Kei project board CLI', () => {
 
       const overflow = await loadWorkspace(url);
       overflow.workspace.projects[0].notes_md = 'x'.repeat(199_999);
-      assert.equal((await putWorkspace(url, overflow.workspace, overflow.etag)).status, 204);
+      assert.equal((await putWorkspace(url, overflow.workspace, overflow.etag, overflow.ownerScopeToken)).status, 204);
       const before = await loadWorkspace(url);
 
       await withProxy(url, null, async (proxyUrl, putCount) => {
@@ -280,7 +346,7 @@ describe('Kei project board CLI', () => {
       const project = json(await runCli(['add-project', '--title', 'Trim notes'], url));
       const current = await loadWorkspace(url);
       current.workspace.projects[0].notes_md = 'Meaningful prior note \n\n\t';
-      assert.equal((await putWorkspace(url, current.workspace, current.etag)).status, 204);
+      assert.equal((await putWorkspace(url, current.workspace, current.etag, current.ownerScopeToken)).status, 204);
 
       const result = json(await runCli(['clear-blocker', project.id], url));
       assert.equal(result.notes_md, 'Meaningful prior note\nBlocker: none.');
@@ -390,7 +456,7 @@ describe('Kei project board CLI', () => {
           const current = await loadWorkspace(baseUrl);
           const winning = structuredClone(current.workspace);
           winning.projects[0].summary = 'winner';
-          const winningResponse = await putWorkspace(baseUrl, winning, current.etag);
+          const winningResponse = await putWorkspace(baseUrl, winning, current.etag, current.ownerScopeToken);
           assert.equal(winningResponse.status, 204);
         }
         const upstream = await fetch(`${baseUrl}${request.url}`, {
@@ -399,6 +465,9 @@ describe('Kei project board CLI', () => {
             [IDENTITY]: OWNER,
             'content-type': request.headers['content-type'] ?? 'application/json',
             ...(request.headers['if-match'] ? { 'if-match': request.headers['if-match'] } : {}),
+            ...(request.headers['x-workspace-owner-scope']
+              ? { 'x-workspace-owner-scope': request.headers['x-workspace-owner-scope'] }
+              : {}),
           },
           body: chunks.length === 0 ? undefined : Buffer.concat(chunks),
         });
@@ -477,7 +546,7 @@ describe('Kei project board CLI', () => {
         { ...source.projects.find((project) => project.id === first.id), steps: [{ id: 'shared-step', title: 'First step', done: false, order: 1 }], progress_pct: 0 },
         { ...source.projects.find((project) => project.id === target.id), steps: [{ id: 'shared-step', title: 'Target step', done: false, order: 1 }], progress_pct: 0 },
       ];
-      assert.equal((await putWorkspace(url, source, loaded.etag)).status, 204);
+      assert.equal((await putWorkspace(url, source, loaded.etag, loaded.ownerScopeToken)).status, 204);
       const baseline = await loadWorkspace(url);
 
       await withProxy(url, null, async (proxyUrl, putCount) => {
@@ -681,7 +750,7 @@ describe('Kei project board CLI', () => {
 
       const overflow = await loadWorkspace(url);
       overflow.workspace.projects[0].notes_md = 'x'.repeat(199_999);
-      assert.equal((await putWorkspace(url, overflow.workspace, overflow.etag)).status, 204);
+      assert.equal((await putWorkspace(url, overflow.workspace, overflow.etag, overflow.ownerScopeToken)).status, 204);
       const overflowBaseline = await loadWorkspace(url);
 
       await withProxy(url, null, async (proxyUrl, putCount) => {
@@ -715,7 +784,7 @@ describe('Kei project board CLI', () => {
         const current = await loadWorkspace(baseUrl);
         const winning = structuredClone(current.workspace);
         winning.projects[0].summary = 'winner';
-        assert.equal((await putWorkspace(baseUrl, winning, current.etag)).status, 204);
+        assert.equal((await putWorkspace(baseUrl, winning, current.etag, current.ownerScopeToken)).status, 204);
       }, async (proxyUrl, putCount) => {
         const result = await runCli(['set-blocker', project.id, 'losing'], proxyUrl);
         assert.equal(result.code, 2);
@@ -762,7 +831,7 @@ describe('Kei project board CLI', () => {
       seed.notes_md = hostileNotes;
       seed.steps = [{ id: 'hostile-step', title: hostileStepTitle, done: false, order: 1 }];
       seed.progress_pct = 0;
-      assert.equal((await putWorkspace(url, current.workspace, current.etag)).status, 204);
+      assert.equal((await putWorkspace(url, current.workspace, current.etag, current.ownerScopeToken)).status, 204);
       const baseline = await loadWorkspace(url);
 
       const commands = [

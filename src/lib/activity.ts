@@ -1,5 +1,6 @@
 import type { ActivityEvent } from '../types';
 import { ACTIVITY_CAP } from '../types';
+import { STORAGE_OWNER_SCOPE_KEY } from './storage';
 
 export const ACTIVITY_KEY = 'project-board-activity-v1';
 
@@ -25,7 +26,8 @@ export function loadActivity(): ActivityEvent[] {
   }
 }
 
-export function saveActivity(events: ActivityEvent[]): void {
+export function saveActivity(events: ActivityEvent[], ownerScopeToken?: string | null): void {
+  if (ownerScopeToken !== undefined && localStorage.getItem(STORAGE_OWNER_SCOPE_KEY) !== ownerScopeToken) return;
   localStorage.setItem(
     ACTIVITY_KEY,
     JSON.stringify(events.slice(0, ACTIVITY_CAP)),

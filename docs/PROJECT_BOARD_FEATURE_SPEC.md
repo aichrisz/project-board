@@ -3,8 +3,8 @@
 **Document type:** Portable product specification  
 **Audience:** Any AI or engineer implementing, reviewing, or extending the app  
 **Product name:** Project Board  
-**Current documented version:** 0.15.0 (Quick blocker updates)\
-**Current shipped capability:** all features through **v0.15.0**; visible runtime version chrome and package metadata are synchronized at **v0.15.0**\
+**Current documented version:** 0.15.1 (Workspace persistence recovery)\
+**Current documented capability:** feature inventory through **v0.15.1**; source version chrome and package metadata identify **v0.15.1**. Deployment status is not asserted here.\
 **Last updated:** 2026-09-30
 
 This document is **self-contained**. It describes *what the product is* and *what features exist*. It does **not** depend on a specific host, owner name, or agent toolchain.
@@ -116,7 +116,13 @@ Activity may be stored separately or alongside depending on implementation; proj
 
 In the authenticated deployment, this version `1` document is persisted in the
 owner's SQLite workspace row. Browser `localStorage` is the offline cache, and
-workspace API writes use ETag / `If-Match` optimistic concurrency.
+workspace API writes use owner-scoped ETag / `If-Match` optimistic concurrency.
+Workspace API responses are `no-store`. Browser keeps a bounded auxiliary
+pending-write journal tied to the canonical local snapshot and captured ETag:
+it retries only when remote revision still matches that base, recognizes an
+already-committed snapshot, and preserves local data with a conflict notice
+when revisions diverge. The version-1 workspace schema and canonical storage
+key remain unchanged.
 
 ### 4.6 Focus Session
 
@@ -193,7 +199,7 @@ grades, or recommendations.
 ## 6. Feature inventory by version
 
 Use this as a capability checklist. Versions are incremental; **current documented
-ship = all rows through 0.15.0**. Version 0.8.2 added no product features
+scope = all rows through 0.15.1**. Version 0.8.2 added no product features
 (documentation and release metadata only).
 
 ### 6.1 v0.1 — MVP
@@ -363,11 +369,11 @@ horizontal scroll behavior are preserved.
    recommendations.
 
 **Version boundary:** v0.11.0 describes the Focus Session feature set. The
-current v0.15.0 release metadata is documented below; application semver and
-the existing workspace document schema version `1` remain independent. No new
-dependency, storage key, route, keyboard shortcut, telemetry, analytics,
-notification, or network behavior was added. The existing v0.9 accessibility and
-v0.10 visual contracts remain in force.
+current v0.15.1 release metadata is documented below; application semver and
+the existing workspace document schema version `1` remain independent.
+Version v0.11.0 added no dependency, storage key, route, keyboard shortcut,
+telemetry, analytics, notification, or network behavior. The existing v0.9
+accessibility and v0.10 visual contracts remain in force.
 
 ### 6.12 v0.12 — Focus Dashboard & durable workspace
 
@@ -475,6 +481,29 @@ v0.10 visual contracts remain in force.
    spec identify **v0.15.0**. Workspace and export schema remain `version: 1`;
    no dependency, route, or stored field was added.
 
+### 6.16 v0.15.1 — Workspace persistence recovery
+
+1. **Pending-write refresh recovery** — before a remote write, the browser
+   records a bounded auxiliary journal containing the local workspace digest
+   and captured base ETag. On reload, matching remote content is recognized as
+   already committed. Otherwise the local snapshot retries only when the remote
+   ETag still equals the captured base revision.
+2. **Failed-save recovery and conflict safety** — reload reconciles uncertain
+   or failed writes without waiting for another edit. If the remote revision
+   diverged, the journal is invalid, or local state no longer matches the
+   journal, local data is preserved and a conflict is surfaced. HTTP `412` is
+   never blindly retried or overwritten.
+3. **Owner-scoped API caching** — workspace ETags are scoped to authenticated
+   owner identity; workspace API responses use `no-store`.
+4. **Acknowledgment boundary** — local UI state does not mean remote save
+   succeeded. Remote acknowledgment depends on the server response.
+5. **Release boundary** — package metadata, both root versions in
+   `package-lock.json`, `src/version.ts`, README, changelog, and this portable
+   spec identify **v0.15.1**. Workspace and export schema remain `version: 1`;
+   the canonical storage key, dependencies, and API routes remain unchanged.
+   `workspace_owner_scopes` adds owner-identity protocol metadata to SQLite;
+   back up the production database before deployment.
+
 ---
 
 ## 7. Cross-cutting behaviors
@@ -556,7 +585,7 @@ An implementation is “feature-complete for 0.15” if:
 - [ ] Focus chip + URL work  
 - [ ] Duplicate creates idea copy with unchecked steps  
 - [ ] Link chips safe for http(s) / path-like  
-- [x] Footer/chrome and package metadata are synchronized at **v0.15.0**
+- [x] Footer/chrome and package metadata are synchronized at **v0.15.1**
 - [ ] Kei CLI uses the default loopback API and accepts an explicit owner
 - [ ] `set-blocker`, `clear-blocker`, `add-milestone`, and `set-next` validate
       input and emit `project_updated`; `set-next` directs to `add-step` when
@@ -626,4 +655,4 @@ Possible later themes (only if product owner approves a plan):
 
 ---
 
-*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.15.0.*
+*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.15.1.*

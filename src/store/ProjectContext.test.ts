@@ -27,3 +27,14 @@ describe('blocker mutation store wiring', () => {
     assert.doesNotMatch(action, /status\s*:|saveRemoteWorkspace|queueRemoteWorkspaceSave/);
   });
 });
+
+describe('hydration snapshot application', () => {
+  it('validates observed owner, cache, and journal before applying remote data', () => {
+    const validation = source.indexOf('if (!isHydratedWorkspaceCurrent(hydrated))');
+    const apply = source.indexOf('applySnapshot(snapshot)', validation);
+    assert.notEqual(validation, -1);
+    assert.ok(apply > validation);
+    assert.match(source.slice(validation, apply), /remoteSyncRef\.current = 'failed'/);
+    assert.match(source.slice(validation, apply), /setReady\(true\)/);
+  });
+});

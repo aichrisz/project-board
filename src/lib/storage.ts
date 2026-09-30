@@ -4,6 +4,8 @@ import { normalizeFocusState } from './focusSession';
 import { withAutoProgress } from './progress';
 
 export const STORAGE_KEY = 'project-board-v1';
+export const STORAGE_OWNER_SCOPE_KEY = 'project-board-v1-owner-scope';
+export const ORPHAN_STORAGE_PREFIX = `${STORAGE_KEY}-orphan-`;
 
 function parseTheme(value: unknown): ThemeMode {
   if (value === 'dark' || value === 'light' || value === 'system') return value;
@@ -48,7 +50,8 @@ export function loadStorage(): StorageBlob | null {
   }
 }
 
-export function saveStorage(blob: StorageBlob): void {
+export function saveStorage(blob: StorageBlob, ownerScopeToken?: string | null): void {
+  if (ownerScopeToken !== undefined && localStorage.getItem(STORAGE_OWNER_SCOPE_KEY) !== ownerScopeToken) return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
 }
 

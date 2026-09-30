@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { access, readFile, realpath } from 'node:fs/promises';
 import { dirname, extname, resolve, sep } from 'node:path';
@@ -18,7 +18,7 @@ const MAX_ITEMS_PER_PROJECT = 500;
 const MAX_TAGS_PER_PROJECT = 50;
 const MAX_FOCUS_HISTORY = 250;
 const MAX_FOCUS_NOTE_CHARS = 200;
-const WORKSPACE_CREATION_ETAG = '"workspace-missing"';
+const WORKSPACE_CREATION_ETAG_PREFIX = '"workspace-missing-';
 const PROJECT_TYPES = new Set(['game', 'web', 'tool', 'learning', 'infra', 'other']);
 const PROJECT_STATUSES = new Set(['idea', 'planned', 'in_progress', 'paused', 'done', 'archived']);
 const ACTIVITY_TYPES = new Set([
@@ -86,8 +86,12 @@ function sendEmpty(response, status) {
   response.end();
 }
 
-function workspaceEtag(dataJson) {
-  return `"${createHash('sha256').update(dataJson).digest('hex')}"`;
+function workspaceEtag(owner, dataJson) {
+  return `"${createHash('sha256').update(owner).update('\0').update(dataJson).digest('hex')}"`;
+}
+
+function workspaceCreationEtag(owner) {
+  return `${WORKSPACE_CREATION_ETAG_PREFIX}${createHash('sha256').update(owner).digest('hex')}"`;
 }
 
 function isValidString(value, max, allowBlank = false) {
@@ -347,6 +351,10 @@ export function createApp({ databasePath, distDir = resolve('dist') }) {
       data_json TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS workspace_owner_scopes (
+      owner_email TEXT PRIMARY KEY,
+      scope_token TEXT NOT NULL UNIQUE
+    );
   `);
   const putWorkspace = database.prepare(`
     INSERT INTO workspaces (owner_email, data_json, updated_at)
@@ -358,11 +366,21 @@ export function createApp({ databasePath, distDir = resolve('dist') }) {
   const getWorkspace = database.prepare(
     'SELECT data_json FROM workspaces WHERE owner_email = ?',
   );
+  const getOwnerScope = database.prepare(
+    'SELECT scope_token FROM workspace_owner_scopes WHERE owner_email = ?',
+  );
+  const insertOwnerScope = database.prepare(
+    'INSERT OR IGNORE INTO workspace_owner_scopes (owner_email, scope_token) VALUES (?, ?)',
+  );
+  function ownerScopeToken(owner) {
+    insertOwnerScope.run(owner, randomBytes(32).toString('base64url'));
+    return getOwnerScope.get(owner).scope_token;
+  }
   function compareAndPutWorkspace(owner, dataJson, expectedEtag) {
     database.exec('BEGIN IMMEDIATE');
     try {
       const row = getWorkspace.get(owner);
-      const currentEtag = row ? workspaceEtag(row.data_json) : WORKSPACE_CREATION_ETAG;
+      const currentEtag = row ? workspaceEtag(owner, row.data_json) : workspaceCreationEtag(owner);
       if (currentEtag !== expectedEtag) {
         database.exec('ROLLBACK');
         return false;
@@ -399,6 +417,7 @@ export function createApp({ databasePath, distDir = resolve('dist') }) {
     }
 
     if (pathname === '/api/health') {
+      response.setHeader('cache-control', 'no-store');
       if (request.method !== 'GET') {
         response.setHeader('allow', 'GET');
         sendEmpty(response, 405);
@@ -409,23 +428,30 @@ export function createApp({ databasePath, distDir = resolve('dist') }) {
     }
 
     if (pathname === '/api/workspace') {
+      response.setHeader('cache-control', 'no-store');
       const owner = normalizeOwner(request);
       if (!owner) {
         sendJson(response, 401, { error: 'unauthorized' });
         return;
       }
+      const scopeToken = ownerScopeToken(owner);
       if (request.method === 'GET') {
+        response.setHeader('x-workspace-owner-scope', scopeToken);
         const row = getWorkspace.get(owner);
         if (!row) {
-          response.setHeader('etag', WORKSPACE_CREATION_ETAG);
+          response.setHeader('etag', workspaceCreationEtag(owner));
           sendEmpty(response, 204);
           return;
         }
-        response.setHeader('etag', workspaceEtag(row.data_json));
+        response.setHeader('etag', workspaceEtag(owner, row.data_json));
         sendJson(response, 200, JSON.parse(row.data_json));
         return;
       }
       if (request.method === 'PUT') {
+        if (request.headers['x-workspace-owner-scope'] !== scopeToken) {
+          sendJson(response, 409, { error: 'workspace owner scope changed' });
+          return;
+        }
         const expectedEtag = request.headers['if-match'];
         if (typeof expectedEtag !== 'string' || expectedEtag.length === 0) {
           sendJson(response, 428, { error: 'If-Match required' });
@@ -452,7 +478,8 @@ export function createApp({ databasePath, distDir = resolve('dist') }) {
           sendEmpty(response, 412);
           return;
         }
-        response.setHeader('etag', workspaceEtag(dataJson));
+        response.setHeader('x-workspace-owner-scope', scopeToken);
+        response.setHeader('etag', workspaceEtag(owner, dataJson));
         sendEmpty(response, 204);
         return;
       }

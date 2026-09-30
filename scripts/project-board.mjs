@@ -5,7 +5,6 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const DEFAULT_URL = 'http://127.0.0.1:8780';
-const CREATION_ETAG = '"workspace-missing"';
 const MAX_ID_CHARS = 200;
 const MAX_TITLE_CHARS = 400;
 const MAX_SUMMARY_CHARS = 2000;
@@ -175,7 +174,9 @@ async function getWorkspace(config, fetcher) {
   });
   const etag = response.headers.get('etag');
   if (!etag) throw new CliError('workspace response missing ETag');
-  if (response.status === 204) return { workspace: defaultWorkspace(), etag: CREATION_ETAG };
+  const ownerScopeToken = response.headers.get('x-workspace-owner-scope');
+  if (!ownerScopeToken) throw new CliError('workspace response missing owner scope');
+  if (response.status === 204) return { workspace: defaultWorkspace(), etag, ownerScopeToken };
   if (!response.ok) throw new CliError(`workspace GET failed: ${response.status}`);
   let workspace;
   try {
@@ -183,21 +184,25 @@ async function getWorkspace(config, fetcher) {
   } catch {
     throw new CliError('workspace response was not JSON');
   }
-  return { workspace: assertWorkspace(workspace), etag };
+  return { workspace: assertWorkspace(workspace), etag, ownerScopeToken };
 }
 
-async function putWorkspace(config, workspace, etag, fetcher) {
+async function putWorkspace(config, workspace, etag, ownerScopeToken, fetcher) {
   const response = await fetcher(`${config.url}/api/workspace`, {
     method: 'PUT',
     headers: {
       'Cf-Access-Authenticated-User-Email': config.owner,
       'content-type': 'application/json',
       'if-match': etag,
+      'x-workspace-owner-scope': ownerScopeToken,
     },
     body: JSON.stringify(workspace),
   });
   if (response.status === 412) throw new ConflictError();
   if (!response.ok) throw new CliError(`workspace PUT failed: ${response.status}`);
+  if (response.headers.get('x-workspace-owner-scope') !== ownerScopeToken) {
+    throw new CliError('workspace owner scope changed');
+  }
   return response.headers.get('etag');
 }
 
@@ -534,14 +539,14 @@ export async function run(argv, { env = process.env, fetcher = fetch } = {}) {
     throw new CliError('--dry-run is only valid for mutation commands');
   }
   const config = resolveConfig(options, env);
-  const { workspace, etag } = await getWorkspace(config, fetcher);
+  const { workspace, etag, ownerScopeToken } = await getWorkspace(config, fetcher);
   if (dryRun && descriptor && descriptor.mutating) {
     const { preview, text } = simulateCommand(workspace, positionals, options, descriptor, etag);
     return { dryRun: true, format, preview, text };
   }
   const result = executeCommand(workspace, positionals, options);
   if (descriptor ? descriptor.mutating : !['list', 'inspect'].includes(positionals[0])) {
-    await putWorkspace(config, workspace, etag, fetcher);
+    await putWorkspace(config, workspace, etag, ownerScopeToken, fetcher);
   }
   return result;
 }

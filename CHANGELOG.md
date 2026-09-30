@@ -2,6 +2,30 @@
 
 All notable changes to Project Board. Local-first single-owner app; dates are UTC.
 
+## 0.15.1 — Workspace persistence recovery (2026-09-30)
+
+### Changed
+
+- **Refresh recovery.** A bounded auxiliary journal records the pending
+  workspace digest and captured ETag before a remote write. On reload, matching
+  remote content is recognized as already committed; otherwise the local
+  snapshot retries only while the remote ETag still equals its captured base.
+- **Failed-save recovery.** Reload reconciles uncertain or failed writes rather
+  than waiting for another edit. Divergent revisions preserve local data and
+  surface a conflict. HTTP `412` is never blindly retried or overwritten.
+- **Owner-scoped cache safety.** Workspace ETags include owner identity, and
+  workspace API responses use `no-store`.
+- **Owner identity metadata.** SQLite adds `workspace_owner_scopes` without
+  changing workspace or export schema. Back up the production database before
+  deployment.
+
+### Unchanged
+
+- Local workspace state is not remote-save acknowledgment; acknowledgment
+  depends on a successful server response.
+- Workspace and export schema remain `version: 1`; canonical storage key,
+  dependencies, and API routes remain unchanged.
+
 ## 0.15.0 — Quick blocker updates (2026-09-30)
 
 ### Added
