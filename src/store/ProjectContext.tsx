@@ -51,7 +51,14 @@ import {
   type WorkspaceSyncState,
 } from '../lib/remoteWorkspace';
 import { applyTheme } from '../lib/theme';
-import { updateBlockerNote, type BlockerNoteResult } from '../lib/blocker';
+import {
+  appendMilestone,
+  updateBlockerNote,
+  type BlockerNoteResult,
+  type MilestoneResult,
+} from '../lib/blocker';
+import { editNextAction, type NextActionEditResult } from '../lib/projectSignals';
+import { getRemoteSaveStatus, type RemoteSaveStatus } from '../lib/saveStatus';
 import type {
   ActivityEvent,
   ActiveFocusSession,
@@ -91,6 +98,10 @@ export type ProjectInput = {
 };
 
 type BlockerMutationResult = BlockerNoteResult | { kind: 'missing' | 'not-ready' };
+type NextActionMutationResult = NextActionEditResult | { kind: 'missing' | 'not-ready' };
+type MilestoneMutationResult = MilestoneResult | { kind: 'missing' | 'not-ready' };
+type PendingRemoteSave = { id: number; key: string };
+type RemoteSaveError = { id: number; key: string };
 
 type ProjectContextValue = {
   projects: Project[];
@@ -100,8 +111,17 @@ type ProjectContextValue = {
   ready: boolean;
   reloadRequired: boolean;
   remotePersistenceError: string | null;
+  remoteSaveStatus: RemoteSaveStatus;
   getProject: (id: string) => Project | undefined;
   updateBlocker: (id: string, text: string | null) => BlockerMutationResult;
+  updateNextAction: (
+    projectId: string,
+    stepId: string,
+    originalTitle: string,
+    originalOrder: number,
+    title: string,
+  ) => NextActionMutationResult;
+  addMilestone: (projectId: string, text: string) => MilestoneMutationResult;
   createProject: (input: ProjectInput) => Project;
   updateProject: (id: string, patch: Partial<Project>) => void;
   deleteProject: (id: string) => void;
@@ -213,6 +233,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [remoteReady, setRemoteReady] = useState(false);
   const [reloadRequired, setReloadRequired] = useState(false);
   const [remotePersistenceError, setRemotePersistenceError] = useState<string | null>(null);
+  const [remoteSaveRevision, setRemoteSaveRevision] = useState(0);
   const remoteSyncRef = useRef<'loading' | 'ready' | 'failed'>('loading');
   const remoteRevisionRef = useRef<WorkspaceSyncState>({
     etag: CREATION_ETAG,
@@ -221,34 +242,80 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   });
   const ownerScopeRef = useRef<string | null>(null);
   const remoteBaselineRef = useRef<string | null>(null);
-  const remotePendingRef = useRef<string | null>(null);
+  const remotePendingRef = useRef<PendingRemoteSave | null>(null);
+  const remotePendingCountRef = useRef(0);
+  const remoteSaveSequenceRef = useRef(0);
+  const latestRemoteSaveIdRef = useRef(0);
+  const remoteErrorKeyRef = useRef<RemoteSaveError | null>(null);
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const focusRef = useRef(focus);
   focusRef.current = focus;
   const activityRef = useRef(activity);
   activityRef.current = activity;
 
+  const setSettingsSnapshot = useCallback((nextSettings: AppSettings) => {
+    settingsRef.current = nextSettings;
+    setSettings(nextSettings);
+  }, []);
+  const latestWorkspaceKey = useCallback(
+    () =>
+      workspaceKey(
+        makeRemoteWorkspace(
+          projectsRef.current,
+          settingsRef.current,
+          focusRef.current,
+          activityRef.current,
+        ),
+      ),
+    [],
+  );
+
   const saveRemoteWorkspace = useCallback((workspace: RemoteWorkspace) => {
     const key = workspaceKey(workspace);
-    if (remotePendingRef.current === key) return;
-    remotePendingRef.current = key;
+    if (remotePendingRef.current?.key === key) return;
+    const pending = { id: ++remoteSaveSequenceRef.current, key };
+    latestRemoteSaveIdRef.current = pending.id;
+    remotePendingRef.current = pending;
+    remotePendingCountRef.current += 1;
+    if (latestWorkspaceKey() === key) {
+      remoteErrorKeyRef.current = null;
+      setRemotePersistenceError(null);
+    }
     void queueRemoteWorkspaceSave(workspace, remoteRevisionRef.current)
       .then((savedWorkspace) => {
         remoteBaselineRef.current = workspaceKey(savedWorkspace);
-        if (remotePendingRef.current === key) remotePendingRef.current = null;
-        setRemotePersistenceError(null);
+        if (remotePendingRef.current?.id === pending.id) remotePendingRef.current = null;
+        remotePendingCountRef.current = Math.max(0, remotePendingCountRef.current - 1);
+        if (
+          latestRemoteSaveIdRef.current === pending.id &&
+          latestWorkspaceKey() === key
+        ) {
+          remoteErrorKeyRef.current = null;
+          setRemotePersistenceError(null);
+        }
+        setRemoteSaveRevision((revision) => revision + 1);
       })
       .catch((error: unknown) => {
-        if (remotePendingRef.current === key) remotePendingRef.current = null;
+        if (remotePendingRef.current?.id === pending.id) remotePendingRef.current = null;
+        remotePendingCountRef.current = Math.max(0, remotePendingCountRef.current - 1);
         if (error instanceof WorkspaceConflictError) {
           setReloadRequired(true);
-          setRemotePersistenceError(null);
+          setRemoteSaveRevision((revision) => revision + 1);
           return;
         }
-        setRemotePersistenceError(REMOTE_SAVE_FAILURE);
+        if (
+          latestRemoteSaveIdRef.current === pending.id &&
+          latestWorkspaceKey() === key
+        ) {
+          remoteErrorKeyRef.current = pending;
+          setRemotePersistenceError(REMOTE_SAVE_FAILURE);
+        }
+        setRemoteSaveRevision((revision) => revision + 1);
       });
-  }, []);
+  }, [latestWorkspaceKey]);
 
   const persistActivity = useCallback((events: ActivityEvent[]) => {
     if (remoteSyncRef.current !== 'ready' || ownerScopeRef.current === null) return;
@@ -352,10 +419,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     };
     const applySnapshot = (snapshot: RemoteWorkspace) => {
       projectsRef.current = snapshot.projects;
+      settingsRef.current = snapshot.settings;
       focusRef.current = snapshot.focus ?? DEFAULT_FOCUS_STATE;
       activityRef.current = snapshot.activity;
       setProjects(snapshot.projects);
-      setSettings(snapshot.settings);
+      setSettingsSnapshot(snapshot.settings);
       setFocus(snapshot.focus ?? DEFAULT_FOCUS_STATE);
       setActivity(snapshot.activity);
     };
@@ -400,6 +468,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             ? workspaceKey(snapshot)
             : null;
         remotePendingRef.current = null;
+        remotePendingCountRef.current = 0;
         if (hydrated.reloadRequired) {
           setReloadRequired(true);
           setRemotePersistenceError(
@@ -424,7 +493,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false;
     };
-  }, [persistActivity, saveRemoteWorkspace]);
+  }, [persistActivity, saveRemoteWorkspace, setSettingsSnapshot]);
 
   useEffect(() => {
     if (!ready || remoteSyncRef.current !== 'ready') return;
@@ -438,7 +507,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     if (remoteRevisionRef.current.blocked) return;
     const workspace = makeRemoteWorkspace(projects, settings, focus, activity);
     const key = workspaceKey(workspace);
-    if (key === remoteBaselineRef.current || key === remotePendingRef.current) return;
+    if (key === remotePendingRef.current?.key) return;
+    if (key === remoteBaselineRef.current && remotePendingRef.current === null) return;
     saveRemoteWorkspace(workspace);
   }, [activity, focus, projects, remoteReady, ready, saveRemoteWorkspace, settings]);
 
@@ -459,6 +529,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     (id: string) => projects.find((p) => p.id === id),
     [projects],
   );
+
+  const currentWorkspaceKey = latestWorkspaceKey();
+  const currentPersistenceError =
+    remotePersistenceError &&
+    (remoteErrorKeyRef.current === null || (
+      remoteErrorKeyRef.current.id === latestRemoteSaveIdRef.current &&
+      remoteErrorKeyRef.current.key === currentWorkspaceKey
+    ))
+      ? remotePersistenceError
+      : null;
+  const remoteSaveStatus = getRemoteSaveStatus({
+    loading: !remoteReady || remoteSyncRef.current === 'loading',
+    failed: remoteSyncRef.current === 'failed',
+    conflict: reloadRequired,
+    saveError: currentPersistenceError !== null,
+    latestKey: currentWorkspaceKey,
+    acknowledgedKey: remoteBaselineRef.current,
+    hasPendingWork: remotePendingCountRef.current > 0,
+  });
 
   const updateBlocker = useCallback(
     (id: string, text: string | null): BlockerMutationResult => {
@@ -485,6 +574,67 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             ? `Cleared blocker on “${current.title}”`
             : `Updated blocker on “${current.title}”`,
           id,
+        ),
+      );
+      return result;
+    },
+    [commitProjectSnapshot, pushActivity, ready],
+  );
+
+  const updateNextAction = useCallback(
+    (
+      projectId: string,
+      stepId: string,
+      originalTitle: string,
+      originalOrder: number,
+      title: string,
+    ): NextActionMutationResult => {
+      if (!ready) return { kind: 'not-ready' };
+      const current = projectsRef.current.find((project) => project.id === projectId);
+      if (!current) return { kind: 'missing' };
+      const result = editNextAction(
+        current,
+        stepId,
+        originalTitle,
+        title,
+        nowIso(),
+        originalOrder,
+      );
+      if (result.kind !== 'changed') return result;
+      const nextProjects = projectsRef.current.map((project) =>
+        project.id === projectId ? result.project : project,
+      );
+      commitProjectSnapshot(nextProjects, focusRef.current);
+      pushActivity(
+        makeActivity(
+          'project_updated',
+          `Updated next step for “${current.title}”`,
+          projectId,
+        ),
+      );
+      return result;
+    },
+    [commitProjectSnapshot, pushActivity, ready],
+  );
+
+  const addMilestone = useCallback(
+    (projectId: string, text: string): MilestoneMutationResult => {
+      if (!ready) return { kind: 'not-ready' };
+      const current = projectsRef.current.find((project) => project.id === projectId);
+      if (!current) return { kind: 'missing' };
+      const result = appendMilestone(current, text);
+      if (result.kind !== 'changed') return result;
+      const nextProjects = projectsRef.current.map((project) =>
+        project.id === projectId
+          ? { ...project, notes_md: result.notes, updated_at: result.updatedAt }
+          : project,
+      );
+      commitProjectSnapshot(nextProjects, focusRef.current);
+      pushActivity(
+        makeActivity(
+          'project_updated',
+          `Added milestone for “${current.title}”`,
+          projectId,
         ),
       );
       return result;
@@ -940,19 +1090,19 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   }, [commitProjectSnapshot, pushActivity, settings.idleDays]);
 
   const setShowCompleted = useCallback((value: boolean) => {
-    setSettings((s) => ({ ...s, showCompleted: value }));
-  }, []);
+    setSettingsSnapshot({ ...settingsRef.current, showCompleted: value });
+  }, [setSettingsSnapshot]);
 
   const setIdleDays = useCallback((value: number) => {
-    setSettings((s) => ({
-      ...s,
+    setSettingsSnapshot({
+      ...settingsRef.current,
       idleDays: Math.min(90, Math.max(1, Math.round(value) || 14)),
-    }));
-  }, []);
+    });
+  }, [setSettingsSnapshot]);
 
   const setTheme = useCallback((value: ThemeMode) => {
-    setSettings((s) => ({ ...s, theme: value }));
-  }, []);
+    setSettingsSnapshot({ ...settingsRef.current, theme: value });
+  }, [setSettingsSnapshot]);
 
   const exportData = useCallback(() => {
     const exportedAt = nowIso();
@@ -968,8 +1118,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     };
     const date = new Date().toISOString().slice(0, 10);
     downloadJson(`project-board-${date}.json`, toExportJson(blob));
-    setSettings(nextSettings);
-  }, [focus, projects, settings]);
+    setSettingsSnapshot(nextSettings);
+  }, [focus, projects, settings, setSettingsSnapshot]);
 
   const importData = useCallback(
     (jsonText: string, options: ImportOptions = { mode: 'replace' }) => {
@@ -990,7 +1140,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             ? ' · focus state replaced'
             : '';
         commitProjectSnapshot(nextProjects, nextFocus);
-        setSettings({ ...DEFAULT_SETTINGS, ...blob.settings });
+        setSettingsSnapshot({ ...DEFAULT_SETTINGS, ...blob.settings });
         pushActivity(
           makeActivity(
             'import',
@@ -1026,7 +1176,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           : '';
       commitProjectSnapshot(postMergeProjects, nextFocus);
       if (options.applySettings) {
-        setSettings({ ...DEFAULT_SETTINGS, ...blob.settings });
+        setSettingsSnapshot({ ...DEFAULT_SETTINGS, ...blob.settings });
       }
       pushActivity(
         makeActivity(
@@ -1037,7 +1187,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         ),
       );
     },
-    [commitProjectSnapshot, pushActivity],
+    [commitProjectSnapshot, pushActivity, setSettingsSnapshot],
   );
 
   const loadSeed = useCallback(
@@ -1074,9 +1224,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const resetAll = useCallback(() => {
     const seedProjects = SEED_PROJECTS.map(normalizeProject);
     commitProjectSnapshot(seedProjects, DEFAULT_FOCUS_STATE);
-    setSettings(DEFAULT_SETTINGS);
+    setSettingsSnapshot(DEFAULT_SETTINGS);
     pushActivity(makeActivity('reset', 'Board reset to seed defaults'));
-  }, [commitProjectSnapshot, pushActivity]);
+  }, [commitProjectSnapshot, pushActivity, setSettingsSnapshot]);
 
   const canMarkFocusStepDone = useMemo(
     () => canMarkLinkedStepDone({ projects, active: focus.active }),
@@ -1091,9 +1241,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       focus,
       ready,
       reloadRequired,
-      remotePersistenceError,
+      remotePersistenceError: currentPersistenceError,
+      remoteSaveStatus,
       getProject,
       updateBlocker,
+      updateNextAction,
+      addMilestone,
       createProject,
       updateProject,
       deleteProject,
@@ -1125,9 +1278,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       focus,
       ready,
       reloadRequired,
-      remotePersistenceError,
+      currentPersistenceError,
+      remoteSaveStatus,
+      remoteSaveRevision,
       getProject,
       updateBlocker,
+      updateNextAction,
+      addMilestone,
       createProject,
       updateProject,
       deleteProject,

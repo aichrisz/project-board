@@ -2,14 +2,42 @@
 
 All notable changes to Project Board. Local-first single-owner app; dates are UTC.
 
+## 0.16.0 — Quick updates (2026-10-03)
+
+### Added
+
+- **Trustworthy remote-save status.** The global indicator reports Loading,
+  Saving, Saved, unavailable, failed, or conflict states. Saved requires the
+  latest local workspace snapshot to be acknowledged by the server; static
+  deployments without the remote API never claim remote persistence.
+- **Guarded Dashboard next-step editor.** Cards can rename their first
+  unfinished step. Submission checks the captured step ID and original title
+  against the current first unfinished step; stale edits retain their draft.
+  Titles are nonblank, single-line, and at most 400 characters. No-op saves
+  create no activity; accepted edits preserve progress and step metadata and
+  create one activity event.
+- **Project Detail milestone capture.** Appends
+  `Milestone YYYY-MM-DD: <text>` using UTC. Rejects blank, multiline (including
+  U+2028/U+2029), over-2,000-character text and notes over 200,000 characters.
+  Accepted appends preserve existing project status and steps and create one
+  activity event.
+
+### Unchanged
+
+- Workspace and export schema remain `version: 1`; no dependency, route, API
+  protocol, persistence retry, or database change.
+- Existing owner, hydration, journal, and HTTP `412` conflict protections remain
+  authoritative.
+
 ## 0.15.1 — Workspace persistence recovery (2026-09-30)
 
 ### Changed
 
-- **Refresh recovery.** A bounded auxiliary journal records the pending
-  workspace digest and captured ETag before a remote write. On reload, matching
-  remote content is recognized as already committed; otherwise the local
+- **Refresh recovery.** A bounded auxiliary journal records an operation ID and
+  captured ETag before a remote write. On reload, canonical JSON comparison
+  recognizes matching remote content as already committed; otherwise the local
   snapshot retries only while the remote ETag still equals its captured base.
+  Legacy digest journals remain readable.
 - **Failed-save recovery.** Reload reconciles uncertain or failed writes rather
   than waiting for another edit. Divergent revisions preserve local data and
   surface a conflict. HTTP `412` is never blindly retried or overwritten.

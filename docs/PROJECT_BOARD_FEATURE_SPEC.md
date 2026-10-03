@@ -3,9 +3,9 @@
 **Document type:** Portable product specification  
 **Audience:** Any AI or engineer implementing, reviewing, or extending the app  
 **Product name:** Project Board  
-**Current documented version:** 0.15.1 (Workspace persistence recovery)\
-**Current documented capability:** feature inventory through **v0.15.1**; source version chrome and package metadata identify **v0.15.1**. Deployment status is not asserted here.\
-**Last updated:** 2026-09-30
+**Current documented version:** 0.16.0 (Quick updates)\
+**Current documented capability:** feature inventory through **v0.16.0**; source version chrome and package metadata identify **v0.16.0**. Deployment status is not asserted here.\
+**Last updated:** 2026-10-03
 
 This document is **self-contained**. It describes *what the product is* and *what features exist*. It does **not** depend on a specific host, owner name, or agent toolchain.
 
@@ -484,10 +484,11 @@ accessibility and v0.10 visual contracts remain in force.
 ### 6.16 v0.15.1 — Workspace persistence recovery
 
 1. **Pending-write refresh recovery** — before a remote write, the browser
-   records a bounded auxiliary journal containing the local workspace digest
-   and captured base ETag. On reload, matching remote content is recognized as
-   already committed. Otherwise the local snapshot retries only when the remote
-   ETag still equals the captured base revision.
+   records a bounded auxiliary journal containing an operation ID and captured
+   base ETag. On reload, canonical JSON comparison recognizes matching remote
+   content as already committed. Otherwise the local snapshot retries only when
+   the remote ETag still equals the captured base revision. Legacy digest
+   journals remain readable.
 2. **Failed-save recovery and conflict safety** — reload reconciles uncertain
    or failed writes without waiting for another edit. If the remote revision
    diverged, the journal is invalid, or local state no longer matches the
@@ -503,6 +504,29 @@ accessibility and v0.10 visual contracts remain in force.
    the canonical storage key, dependencies, and API routes remain unchanged.
    `workspace_owner_scopes` adds owner-identity protocol metadata to SQLite;
    back up the production database before deployment.
+
+### 6.17 v0.16.0 — Quick updates
+
+1. **Latest-snapshot remote-save status** — the global accessible indicator
+   shows Saving until the newest local workspace snapshot is acknowledged.
+   Loading, unavailable, failed-save, and conflict states never show Saved;
+   static deployments without the remote API do not claim server persistence.
+2. **Guarded Dashboard next-step edit** — the editor captures the displayed
+   first unfinished step ID and original title. Submission validates both
+   against the freshest project and rejects a completed, removed, renamed, or
+   displaced step without discarding the draft. Titles are nonblank,
+   single-line, and at most 400 characters. Unchanged saves are no-ops; accepted
+   edits preserve step ID/order/done, progress, focus links, notes, and status
+   and create one activity event.
+3. **Project Detail milestone append** — appends
+   `Milestone YYYY-MM-DD: <trimmed text>` using a UTC date. Rejects blank,
+   over-2,000-character, CR/LF, U+2028, and U+2029 input before trimming;
+   resulting notes remain capped at 200,000 characters. Earlier notes, status,
+   and steps remain intact; accepted appends create one activity event.
+4. **Release boundary** — package metadata, both root versions in
+   `package-lock.json`, `src/version.ts`, README, changelog, and this portable
+   spec identify **v0.16.0**. Workspace/export schema remains `version: 1`; no
+   dependency, route, server protocol, persistence retry, or database change.
 
 ---
 
@@ -585,7 +609,7 @@ An implementation is “feature-complete for 0.15” if:
 - [ ] Focus chip + URL work  
 - [ ] Duplicate creates idea copy with unchecked steps  
 - [ ] Link chips safe for http(s) / path-like  
-- [x] Footer/chrome and package metadata are synchronized at **v0.15.1**
+- [x] Footer/chrome and package metadata are synchronized at **v0.16.0**
 - [ ] Kei CLI uses the default loopback API and accepts an explicit owner
 - [ ] `set-blocker`, `clear-blocker`, `add-milestone`, and `set-next` validate
       input and emit `project_updated`; `set-next` directs to `add-step` when
@@ -599,6 +623,14 @@ An implementation is “feature-complete for 0.15” if:
 - [ ] Preview ETags describe one source revision and do not reserve a later write
 - [ ] Dashboard blocker Save/Clear append-only notes, preserve status/history,
       enforce input/notes limits, and create no activity for no-op actions
+- [ ] Remote-save status never claims Saved before latest-snapshot server
+      acknowledgment; loading, failure, conflict, and static fallback stay honest
+- [ ] Dashboard next-step editor rejects stale captured ID/title/ordering,
+      preserves drafts on rejection, preserves project/step state, and no-ops
+      unchanged titles
+- [ ] Project Detail quick milestone appends one UTC-dated line, rejects raw
+      Unicode line breaks and over-limit content, preserves prior notes/status/
+      steps, and emits one activity event
 - [ ] `complete-step` dry-run previews identify explicit project targets with
       duplicate step IDs for canonical and alias forms, including padded IDs
 - [ ] Workspace and export schema remains `version: 1`
@@ -636,7 +668,7 @@ Possible later themes (only if product owner approves a plan):
 
 1. Treat **§2 principles** as hard constraints.  
 2. Treat **§6** as the feature backlog already shipped (do not re-propose v0.1–v0.5 as “new” unless fixing bugs).  
-3. For new work: propose a **post-v0.15 plan** against gaps only; keep the offline cache, authenticated owner workspace, and CLI concurrency contract aligned.
+3. For new work: propose a **post-v0.16 plan** against gaps only; keep the offline cache, authenticated owner workspace, and CLI concurrency contract aligned.
 4. Prefer small, versioned increments with verify via `npm run build` + manual smoke of routes above.  
 5. Keep UI English and product name **Project Board**.  
 
@@ -655,4 +687,4 @@ Possible later themes (only if product owner approves a plan):
 
 ---
 
-*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.15.1.*
+*End of portable spec. Safe to paste into another AI chat as the single source of product truth for Project Board v0.16.0.*

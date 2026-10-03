@@ -68,6 +68,7 @@ export function Dashboard() {
     ready,
     updateProject,
     updateBlocker,
+    updateNextAction,
     addStep,
     duplicateProject,
     exportData,
@@ -75,6 +76,7 @@ export function Dashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [onboardingSkipped, setOnboardingSkipped] = useState(false);
   const [undoToast, setUndoToast] = useState<UndoToast | null>(null);
+  const [activeCardEditorProjectId, setActiveCardEditorProjectId] = useState<string | null>(null);
   const [nudgeDismissed, setNudgeDismissed] = useState(readNudgeDismissed);
   const [focusDrawer, setFocusDrawer] = useState<FocusDrawerState>({
     open: false,
@@ -525,6 +527,12 @@ export function Dashboard() {
                   onToggleStar={onToggleStar}
                   onAddStep={addStep}
                   onUpdateBlocker={updateBlocker}
+                  onUpdateNextAction={updateNextAction}
+                  activeCardEditorProjectId={activeCardEditorProjectId}
+                  onCardEditorOpen={setActiveCardEditorProjectId}
+                  onCardEditorClose={(projectId) => {
+                    setActiveCardEditorProjectId((activeId) => activeId === projectId ? null : activeId);
+                  }}
                   onArchive={onArchive}
                   onDuplicate={onDuplicate}
                   onStartFocus={openFocusDrawer}

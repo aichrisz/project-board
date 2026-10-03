@@ -4,7 +4,7 @@ A **local-first** personal project inventory dashboard. Track status, progress, 
 
 - **Product name:** Project Board  
 - **Stack:** Vite + React + TypeScript  
-- **Version:** 0.15.1
+- **Version:** 0.16.0
 - **Storage:** authenticated-owner SQLite workspace with browser `localStorage` offline cache
 - **UI language:** English  
 
@@ -57,15 +57,37 @@ target, including canonical and alias commands with padded project IDs. When
 projects share a step ID, text names the target and simulated JSON applies the
 update to that target; preview remains dry-run and sends no PUT.
 
+## Quick updates (v0.16.0)
+
+The global remote-save indicator shows `Saving…` until the latest local
+workspace snapshot receives server acknowledgment. Loading, unavailable,
+failed-save, and conflict states never show `Saved`; static deployments without
+the remote API show remote saving as unavailable.
+
+Dashboard cards can rename the displayed first unfinished step. The editor
+captures its step ID and original title, then rejects stale edits if the step
+was completed, removed, renamed, or displaced from first-unfinished position.
+Titles must be nonblank, single-line, and at most 400 characters. Unchanged
+saves create no activity; accepted edits preserve step identity/order/done,
+progress, project notes, status, and focus links, and emit one activity event.
+
+Project Detail can append `Milestone YYYY-MM-DD: <text>` using the UTC date.
+Text must be nonblank, single-line (including pasted Unicode line separators),
+and at most 2,000 characters; total notes remain capped at 200,000 characters.
+Milestones preserve prior notes, status, and steps, and accepted appends emit one
+activity event.
+
 ## Workspace persistence recovery (v0.15.1)
 
-Browser saves journal the pending schema-1 workspace digest and captured ETag
-before sending a remote write. After refresh or a failed save, reload checks
-whether the remote already contains that exact workspace. If not, it retries
-only when the remote ETag still matches the captured base revision. A changed
-revision or an invalid journal preserves local data and surfaces a conflict;
-HTTP `412` is never blindly retried or overwritten. A local edit is not remote
-save acknowledgment: acknowledgment depends on the server response.
+Browser saves journal an operation ID and captured ETag before sending a remote
+write. After refresh or a failed save, reload compares remote and local
+workspaces using canonical JSON serialization. Matching remote content is
+recognized as already committed; otherwise retry occurs only when the remote
+ETag still matches the captured base revision. Legacy digest journals remain
+readable. A changed revision or invalid journal preserves local data and
+surfaces a conflict; HTTP `412` is never blindly retried or overwritten. A
+local edit is not remote save acknowledgment: acknowledgment depends on the
+server response.
 
 Workspace ETags are owner-scoped, and workspace API responses use `no-store`.
 The canonical workspace schema remains `version: 1`, and its storage key stays
@@ -234,7 +256,7 @@ owner identity and isolates workspaces. The browser `localStorage` data remains
 an offline cache and the existing JSON import/export remains available.
 SQLite stores owner-identity protocol metadata in `workspace_owner_scopes`; the
 workspace and export schemas remain `version: 1`. Back up the production database
-before deploying v0.15.1.
+before deploying changes to the SQLite owner-identity schema.
 
 ```bash
 bash deploy/check.sh

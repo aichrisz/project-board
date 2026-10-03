@@ -7,7 +7,7 @@ const source = readFileSync(new URL('./ProjectContext.tsx', import.meta.url), 'u
 describe('blocker mutation store wiring', () => {
   it('resolves the live project and commits only accepted note changes', () => {
     assert.match(source, /updateBlocker: \(id: string, text: string \| null\) => BlockerMutationResult;/);
-    assert.match(source, /getProject,\n\s+updateBlocker,\n\s+createProject,/);
+    assert.match(source, /getProject,\n\s+updateBlocker,\n\s+updateNextAction,\n\s+addMilestone,\n\s+createProject,/);
 
     const actionStart = source.indexOf('const updateBlocker = useCallback(');
     assert.notEqual(actionStart, -1, 'store action exists');

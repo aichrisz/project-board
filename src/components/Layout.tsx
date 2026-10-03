@@ -31,6 +31,7 @@ export function Layout() {
     ready,
     reloadRequired,
     remotePersistenceError,
+    remoteSaveStatus,
   } = useProjects();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -121,13 +122,24 @@ export function Layout() {
         </div>
       </header>
 
+      <p className="muted remote-save-status" role="status">
+        Remote save: {{
+          loading: 'Loading workspace…',
+          unavailable: 'Unavailable',
+          conflict: 'Reload required',
+          failed: 'Save failed',
+          saving: 'Saving…',
+          saved: 'Saved',
+        }[remoteSaveStatus]}
+      </p>
+
       {remotePersistenceError && (
         <p className="banner banner-nudge-inline" role="status">
           {remotePersistenceError}
         </p>
       )}
 
-      {reloadRequired && !remotePersistenceError && (
+      {reloadRequired && (
         <p className="banner banner-nudge-inline" role="status">
           This workspace changed elsewhere. Reload this page to continue saving.
         </p>

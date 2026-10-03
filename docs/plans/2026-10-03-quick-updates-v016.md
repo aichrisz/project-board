@@ -4,7 +4,7 @@
 
 **Goal:** Add trustworthy save feedback, card next-step editing and quick milestone capture.
 **Architecture:** Reuse shared ProjectContext snapshots and remote queue; add transient acknowledgment UI only, no server protocol changes. Guard card edits by captured identity/title against current project. Append UTC milestones using the existing notes format.
-**Tech Stack:** Existing React/TypeScript, node:test, Playwright harness; Codex via 9Router code-lane with verified reasoning none.
+**Tech Stack:** Existing React/TypeScript, node:test, Playwright harness; Hermes `gpt-6-luna` via `openai-codex`, reasoning `xhigh`, implements and corrects; parent Hermes `gpt-6.1-sol` orchestrates/advises, reviews, verifies and owns release. This project-specific user correction supersedes Codex CLI / 9Router.
 
 ## Task 1: Save acknowledgment
 Files: src/store/ProjectContext.tsx, src/components/Layout.tsx, src/lib/remoteWorkspace.test.ts or a focused new save-status test, src/index.css.

@@ -172,6 +172,16 @@ describe('project signal component rendering', () => {
         projectId: string,
         text: string | null,
       ) => BlockerUpdateResult;
+      onUpdateNextAction: (
+        projectId: string,
+        stepId: string,
+        originalTitle: string,
+        originalOrder: number,
+        title: string,
+      ) => { kind: 'noop' };
+      activeCardEditorProjectId: string | null;
+      onCardEditorOpen: (projectId: string) => void;
+      onCardEditorClose: (projectId: string) => void;
       onArchive: (id: string) => void;
     }>;
     const markup = renderToStaticMarkup(
@@ -184,6 +194,10 @@ describe('project signal component rendering', () => {
           onToggleStar: () => {},
           onAddStep: () => {},
           onUpdateBlocker: () => ({ kind: 'noop' as const, notes: '' }),
+          onUpdateNextAction: () => ({ kind: 'noop' as const }),
+          activeCardEditorProjectId: null,
+          onCardEditorOpen: () => {},
+          onCardEditorClose: () => {},
           onArchive: () => {},
         }),
       ),
@@ -206,6 +220,16 @@ describe('project signal component rendering', () => {
         projectId: string,
         text: string | null,
       ) => BlockerUpdateResult;
+      onUpdateNextAction: (
+        projectId: string,
+        stepId: string,
+        originalTitle: string,
+        originalOrder: number,
+        title: string,
+      ) => { kind: 'noop' };
+      activeCardEditorProjectId: string | null;
+      onCardEditorOpen: (projectId: string) => void;
+      onCardEditorClose: (projectId: string) => void;
       onArchive: (id: string) => void;
     }>;
     const markup = renderToStaticMarkup(
@@ -222,6 +246,10 @@ describe('project signal component rendering', () => {
           onToggleStar: () => {},
           onAddStep: () => {},
           onUpdateBlocker: () => ({ kind: 'noop' as const, notes: '' }),
+          onUpdateNextAction: () => ({ kind: 'noop' as const }),
+          activeCardEditorProjectId: null,
+          onCardEditorOpen: () => {},
+          onCardEditorClose: () => {},
           onArchive: () => {},
         }),
       ),
@@ -243,6 +271,16 @@ describe('project signal component rendering', () => {
         projectId: string,
         text: string | null,
       ) => BlockerUpdateResult;
+      onUpdateNextAction: (
+        projectId: string,
+        stepId: string,
+        originalTitle: string,
+        originalOrder: number,
+        title: string,
+      ) => { kind: 'noop' };
+      activeCardEditorProjectId: string | null;
+      onCardEditorOpen: (projectId: string) => void;
+      onCardEditorClose: (projectId: string) => void;
       onArchive: (id: string) => void;
     }>;
     const markup = renderToStaticMarkup(
@@ -255,6 +293,10 @@ describe('project signal component rendering', () => {
           onToggleStar: () => {},
           onAddStep: () => {},
           onUpdateBlocker: () => ({ kind: 'noop' as const, notes: '' }),
+          onUpdateNextAction: () => ({ kind: 'noop' as const }),
+          activeCardEditorProjectId: null,
+          onCardEditorOpen: () => {},
+          onCardEditorClose: () => {},
           onArchive: () => {},
         }),
       ),
@@ -262,6 +304,7 @@ describe('project signal component rendering', () => {
 
     assert.doesNotMatch(markup, /class="card-blocker-editor"/);
     assert.match(markup, /class="card-next-action"/);
+    assert.match(markup, />Edit next step<\/button>/);
   });
 
   it('renders Review active-project advisory content', async () => {

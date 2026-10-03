@@ -9,6 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const repo = fileURLToPath(new URL('..', import.meta.url));
 const port = Number(process.env.PROJECT_BOARD_PREVIEW_PORT ?? 4178);
 const origin = `http://127.0.0.1:${port}`;
+const quickUpdatesOnly = process.argv.includes('--quick-updates');
 const require = createRequire(import.meta.url);
 let playwrightModule = process.env.PROJECT_BOARD_PLAYWRIGHT_MODULE;
 if (!playwrightModule) {
@@ -37,30 +38,53 @@ const counters = { scenarios: 0, gets: 0, puts: 0, failedAssertions: 0 };
 const OWNER_SCOPE_A = 'A'.repeat(43);
 const OWNER_SCOPE_B = 'B'.repeat(43);
 
-function makeFixture({ firstPut = 'acknowledge', getFailure = false } = {}) {
+function makeFixture({
+  firstPut = 'acknowledge',
+  getFailure = false,
+  holdPuts = [],
+  failPuts = [],
+  extraProject = false,
+  notes = 'Earlier notes',
+} = {}) {
   const project = {
     id: 'target',
     title: 'Synthetic Workout Compass',
     slug: 'synthetic-workout-compass',
     type: 'tool',
     status: 'in_progress',
-    summary: '',
-    progress_pct: 0,
-    steps: [{ id: 'step-1', title: 'Prepare outline', done: false, order: 0 }],
-    notes_md: '',
-    links: [],
-    tags: [],
+    summary: 'A populated synthetic project for isolated responsive and persistence checks.',
+    progress_pct: 50,
+    steps: [
+      { id: 'step-1', title: 'Prepare outline', done: false, order: 0 },
+      { id: 'step-2', title: 'Review outline', done: true, order: 1 },
+    ],
+    notes_md: notes,
+    links: [{ id: 'link-1', label: 'Project notes', url: 'https://example.test/project-notes' }],
+    tags: ['browser', 'fixture'],
     deadline: null,
-    stack: [],
+    stack: ['React', 'Vite'],
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-02T00:00:00.000Z',
     started_at: null,
     starred: false,
   };
+  const secondaryProject = extraProject
+    ? {
+        ...project,
+        id: 'secondary',
+        title: 'Concurrent fixture project',
+        slug: 'concurrent-fixture-project',
+        summary: 'A second populated project used to prove inline editor exclusivity.',
+        progress_pct: 0,
+        steps: [],
+        notes_md: '',
+        updated_at: new Date(Date.now() - 60_000).toISOString(),
+      }
+    : null;
   return {
     workspace: {
       version: 1,
-      projects: [project],
+      projects: secondaryProject ? [project, secondaryProject] : [project],
       settings: { showCompleted: false, idleDays: 14, theme: 'light', lastExportAt: null },
       focus: { active: null, history: [] },
       activity: [],
@@ -69,9 +93,13 @@ function makeFixture({ firstPut = 'acknowledge', getFailure = false } = {}) {
     ownerScopeToken: OWNER_SCOPE_A,
     firstPut,
     getFailure,
+    holdPuts,
+    failPuts,
     puts: [],
     gets: 0,
     hold: null,
+    holds: new Map(),
+    holdWaiters: new Map(),
   };
 }
 
@@ -143,14 +171,32 @@ async function openScenario(options) {
     const call = { payload, ifMatch: route.request().headers()['if-match'] };
     fixture.puts.push(call);
     counters.puts += 1;
-    if (fixture.puts.length === 1 && fixture.firstPut === 'hold') {
-      await new Promise((resolve) => { fixture.hold = { resolve, route }; });
-      if (fixture.hold.aborted) {
+    const heldPut = fixture.firstPut === 'hold' && fixture.puts.length === 1
+      || fixture.holdPuts.includes(fixture.puts.length);
+    if (heldPut) {
+      const held = await new Promise((resolve) => {
+        const putNumber = fixture.puts.length;
+        const pending = {
+          route,
+          aborted: false,
+          released: false,
+          resolve: () => {
+            if (pending.released) return;
+            pending.released = true;
+            resolve(pending);
+          },
+        };
+        fixture.holds.set(putNumber, pending);
+        if (putNumber === 1) fixture.hold = pending;
+        fixture.holdWaiters.get(putNumber)?.(pending);
+        fixture.holdWaiters.delete(putNumber);
+      });
+      if (held.aborted) {
         await route.abort();
         return;
       }
     }
-    if (fixture.puts.length === 1 && fixture.firstPut === 'fail') {
+    if (fixture.failPuts.includes(fixture.puts.length) || (fixture.puts.length === 1 && fixture.firstPut === 'fail')) {
       await route.fulfill({ status: 503 });
       return;
     }
@@ -196,6 +242,93 @@ function waitForWorkspacePut(page) {
   );
   response.catch(() => {});
   return response;
+}
+
+function waitForWorkspaceRequest(page) {
+  const request = page.waitForRequest((item) =>
+    item.url().endsWith('/api/workspace') && item.method() === 'PUT',
+  );
+  request.catch(() => {});
+  return request;
+}
+
+function waitForHeldPut(fixture, putNumber) {
+  const held = fixture.holds.get(putNumber);
+  if (held) return Promise.resolve(held);
+  return new Promise((resolve) => fixture.holdWaiters.set(putNumber, resolve));
+}
+
+async function closeScenario(context, fixture) {
+  for (const held of fixture.holds.values()) {
+    if (held.released) continue;
+    held.aborted = true;
+    held.resolve();
+  }
+  await context.close();
+}
+
+function saveIndicator(page) {
+  return page.locator('.remote-save-status');
+}
+
+async function waitForSaveStatus(page, expected) {
+  await page.waitForFunction((status) =>
+    document.querySelector('.remote-save-status')?.textContent?.trim() === `Remote save: ${status}`,
+  expected);
+}
+
+async function assertPageFits(page, width, label) {
+  await page.setViewportSize({ width, height: 1000 });
+  const measurements = await page.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    document: document.documentElement.scrollWidth,
+    body: document.body.scrollWidth,
+    overwideElements: [...document.querySelectorAll(
+      '.project-card, .card-next-step-editor, .milestone-editor, .detail-main-panel, .panel-title-row',
+    )]
+      .map((element) => ({
+        name: element.className.toString(),
+        left: Math.round(element.getBoundingClientRect().left),
+        right: Math.round(element.getBoundingClientRect().right),
+        width: Math.round(element.getBoundingClientRect().width),
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+      }))
+      .filter((element) => element.left < -1 || element.right > innerWidth + 1 || element.scrollWidth > element.clientWidth + 1),
+  }));
+  assert.equal(measurements.viewport, width, `${label} viewport is set to ${width}px`);
+  assert.ok(measurements.document <= width, `${label} document overflowed ${width}px: ${JSON.stringify(measurements)}`);
+  assert.ok(measurements.body <= width, `${label} body overflowed ${width}px: ${JSON.stringify(measurements)}`);
+  assert.deepEqual(measurements.overwideElements, [], `${label} component overflowed ${width}px`);
+}
+
+async function assertLabeledInput(input, labelText) {
+  const association = await input.evaluate((element, expectedLabel) => {
+    const id = element.id;
+    return {
+      id,
+      labelMatches: [...document.querySelectorAll('label')]
+        .some((label) => label.htmlFor === id && label.textContent.includes(expectedLabel)),
+      focused: document.activeElement === element,
+    };
+  }, labelText);
+  assert.ok(association.id, `${labelText} input has an id`);
+  assert.equal(association.labelMatches, true, `${labelText} has a matching label`);
+  assert.equal(association.focused, true, `${labelText} input receives initial focus`);
+}
+
+async function rejectRawPaste(input, text) {
+  return input.evaluate((element, value) => {
+    const transfer = new DataTransfer();
+    transfer.setData('text/plain', value);
+    const event = new ClipboardEvent('paste', {
+      clipboardData: transfer,
+      bubbles: true,
+      cancelable: true,
+    });
+    element.dispatchEvent(event);
+    return event.defaultPrevented;
+  }, text);
 }
 
 async function assertStarMutation({ firstPut = 'acknowledge', refresh = false } = {}) {
@@ -284,6 +417,7 @@ async function assertConflictDoesNotRetry() {
   await page.getByRole('button', { name: 'Star project' }).click();
   assert.equal((await responsePromise).status(), 412);
   await page.getByRole('status').filter({ hasText: 'changed elsewhere' }).waitFor();
+  await waitForSaveStatus(page, 'Reload required');
   await delay(500);
   assert.equal(fixture.puts.length, 1, '412 conflict never triggers an automatic retry');
   assert.equal((await readLocal(page)).projects[0].starred, true);
@@ -336,6 +470,7 @@ async function assertFailedGetPreservesUnboundCache() {
     initialStorage,
   });
   assert.equal(await page.getByRole('heading', { name: 'Synthetic Workout Compass' }).count(), 0);
+  await waitForSaveStatus(page, 'Unavailable');
   const actualStorage = await page.evaluate(() => Object.fromEntries(
     Object.keys(localStorage)
       .filter((key) => key.startsWith('project-board'))
@@ -367,6 +502,272 @@ async function assertPendingSaveStaysWithOriginalOwner() {
   counters.scenarios += 1;
 }
 
+function projectCard(page, title) {
+  return page.locator('.project-card').filter({
+    has: page.getByRole('heading', { name: title, exact: true }),
+  });
+}
+
+async function assertLatestSnapshotAcknowledgmentAndErrorRecovery() {
+  const { context, page, fixture } = await openScenario({
+    extraProject: true,
+    holdPuts: [1, 2],
+    failPuts: [2],
+  });
+  try {
+    await waitForSaveStatus(page, 'Saved');
+    const target = projectCard(page, 'Synthetic Workout Compass');
+    const startingOrder = await page.locator('.project-card .card-title').allTextContents();
+    assert.ok(startingOrder.indexOf('Synthetic Workout Compass') > startingOrder.indexOf('Concurrent fixture project'));
+
+    const firstResponse = waitForWorkspacePut(page);
+    const firstRequest = waitForWorkspaceRequest(page);
+    await page.getByRole('button', { name: 'Theme: Light. Click to cycle.' }).click();
+    await firstRequest;
+    const firstHold = await waitForHeldPut(fixture, 1);
+    await waitForSaveStatus(page, 'Saving…');
+
+    const secondRequest = waitForWorkspaceRequest(page);
+    await target.getByRole('button', { name: 'Edit next step' }).click();
+    const nextStep = target.getByRole('textbox', { name: 'Next step' });
+    await nextStep.fill('Revised after the earlier save began');
+    await target.getByRole('button', { name: 'Save', exact: true }).click();
+    assert.equal(await page.locator('.project-card .card-title').first().textContent(), 'Synthetic Workout Compass');
+    assert.equal(
+      await page.evaluate((name) => {
+        const card = [...document.querySelectorAll('.project-card')]
+          .find((element) => element.querySelector('.card-title')?.textContent === name);
+        return document.activeElement === card?.querySelector('.card-next-action-edit');
+      }, 'Synthetic Workout Compass'),
+      true,
+      'focus returns to the live opener after the edited card reorders',
+    );
+    assert.equal(await saveIndicator(page).textContent(), 'Remote save: Saving…');
+
+    firstHold.resolve();
+    assert.equal((await firstResponse).status(), 204);
+    await secondRequest;
+    const secondHold = await waitForHeldPut(fixture, 2);
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await saveIndicator(page).textContent(), 'Remote save: Saving…');
+    assert.equal(fixture.workspace.projects.find((project) => project.id === 'target').steps[0].title, 'Prepare outline');
+
+    const pendingSecondResponse = waitForWorkspacePut(page);
+    secondHold.resolve();
+    assert.equal((await pendingSecondResponse).status(), 503);
+    await waitForSaveStatus(page, 'Save failed');
+    assert.equal(fixture.puts.length, 2, 'failed latest save does not retry without a new action');
+    assert.equal(fixture.workspace.settings.theme, 'system');
+    assert.equal(fixture.workspace.projects.find((project) => project.id === 'target').steps[0].title, 'Prepare outline');
+    const local = await readLocal(page);
+    assert.equal(local.projects.find((project) => project.id === 'target').steps[0].title, 'Revised after the earlier save began');
+    assert.equal(local.settings.theme, 'system');
+
+    const recoveryResponse = waitForWorkspacePut(page);
+    await page.reload({ waitUntil: 'networkidle' });
+    assert.equal((await recoveryResponse).status(), 204);
+    await waitForSaveStatus(page, 'Saved');
+    const recovered = fixture.workspace.projects.find((project) => project.id === 'target');
+    assert.equal(recovered.steps[0].title, 'Revised after the earlier save began');
+    assert.equal(recovered.progress_pct, 50);
+    assert.equal(recovered.notes_md, 'Earlier notes');
+    assert.equal(recovered.status, 'in_progress');
+    assert.equal(fixture.workspace.activity.length, 1);
+    assert.equal(fixture.workspace.activity[0].type, 'project_updated');
+    assert.equal(fixture.workspace.activity[0].projectId, 'target');
+    assert.equal(fixture.workspace.settings.theme, 'system');
+    assert.equal(await page.getByRole('textbox', { name: 'Next step' }).count(), 0);
+    assert.equal(fixture.puts.length, 3, 'reload reconciles the failed latest snapshot exactly once');
+    counters.scenarios += 1;
+  } finally {
+    await closeScenario(context, fixture);
+  }
+}
+
+async function assertNextActionNoopStaleDraftAndResponsiveFocus() {
+  const { context, page, fixture } = await openScenario({});
+  try {
+    await waitForSaveStatus(page, 'Saved');
+    const card = projectCard(page, 'Synthetic Workout Compass');
+    const open = card.getByRole('button', { name: 'Edit next step' });
+    assert.ok(await open.evaluate((element) => element.getBoundingClientRect().height >= 44));
+    await open.click();
+    const input = card.getByRole('textbox', { name: 'Next step' });
+    await assertLabeledInput(input, 'Next step');
+    assert.equal(await input.getAttribute('maxlength'), '400');
+    const originalDraft = await input.inputValue();
+    assert.equal(await rejectRawPaste(input, 'first\u2028second'), true);
+    const lineError = card.getByRole('alert');
+    await lineError.waitFor();
+    assert.equal(await input.inputValue(), originalDraft, 'rejected raw paste does not transform the draft');
+    assert.equal(
+      await input.evaluate((element) => document.getElementById(element.getAttribute('aria-describedby'))?.getAttribute('role')),
+      'alert',
+      'editor error is connected with aria-describedby',
+    );
+
+    for (const width of [320, 390, 1440]) {
+      await assertPageFits(page, width, 'Dashboard next-step editor');
+    }
+    await input.fill('Prepare outline');
+    await card.getByRole('button', { name: 'Save', exact: true }).click();
+    await input.waitFor({ state: 'detached' });
+    assert.equal(fixture.puts.length, 0, 'unchanged title creates no remote write');
+    assert.equal(fixture.workspace.activity.length, 0, 'unchanged title creates no activity');
+    assert.equal(
+      await open.evaluate((element) => document.activeElement === element),
+      true,
+      'no-op close restores focus to the current opener',
+    );
+
+    await open.click();
+    const staleInput = card.getByRole('textbox', { name: 'Next step' });
+    await staleInput.fill('Draft must survive stale rejection');
+    const changedOrder = await page.evaluate(() => {
+      const cardElement = [...document.querySelectorAll('.project-card')]
+        .find((element) => element.querySelector('.card-title')?.textContent === 'Synthetic Workout Compass');
+      const fiberKey = Object.keys(cardElement ?? {}).find((key) => key.startsWith('__reactFiber$'));
+      let fiber = fiberKey ? cardElement[fiberKey] : null;
+      while (fiber && fiber.memoizedProps?.project?.id !== 'target') fiber = fiber.return;
+      const project = fiber?.memoizedProps?.project;
+      const step = project?.steps.find((item) => item.id === 'step-1');
+      if (!step) throw new Error('Could not locate the live ProjectCard store snapshot');
+      const originalOrder = step.order;
+      step.order = originalOrder + 10;
+      return { originalOrder, updatedOrder: step.order };
+    });
+    assert.notEqual(changedOrder.updatedOrder, changedOrder.originalOrder);
+    await card.getByRole('button', { name: 'Save', exact: true }).click();
+    await card.getByRole('alert').filter({ hasText: 'Next step changed while editing' }).waitFor();
+    assert.equal(await staleInput.inputValue(), 'Draft must survive stale rejection');
+    assert.equal(fixture.puts.length, 0, 'stale captured order is rejected without a write');
+    assert.equal(fixture.workspace.activity.length, 0, 'stale rejection creates no activity');
+    assert.equal(fixture.workspace.projects[0].steps[0].title, 'Prepare outline');
+    await staleInput.press('Escape');
+    await staleInput.waitFor({ state: 'detached' });
+    const liveOpener = card.getByRole('button', { name: 'Edit next step' });
+    assert.equal(
+      await liveOpener.evaluate((element) => document.activeElement === element),
+      true,
+      'Escape restores focus to the live opener',
+    );
+    assert.equal(await saveIndicator(page).textContent(), 'Remote save: Saved');
+    counters.scenarios += 1;
+  } finally {
+    await closeScenario(context, fixture);
+  }
+}
+
+async function assertOnlyOneDashboardCardEditor() {
+  const { context, page, fixture } = await openScenario({ extraProject: true });
+  try {
+    const target = projectCard(page, 'Synthetic Workout Compass');
+    const secondary = projectCard(page, 'Concurrent fixture project');
+    await target.getByRole('button', { name: 'Edit next step' }).click();
+    await target.getByRole('textbox', { name: 'Next step' }).waitFor();
+    await secondary.getByRole('button', { name: 'Blocker' }).click();
+    await target.locator('.card-next-step-editor').waitFor({ state: 'detached' });
+    await secondary.getByRole('textbox', { name: 'Blocker' }).waitFor();
+    assert.equal(await page.locator('.card-quick form').count(), 1);
+    assert.equal(await page.locator('.card-next-step-editor').count(), 0);
+    await secondary.getByRole('button', { name: 'Cancel', exact: true }).click();
+    assert.equal(
+      await secondary.getByRole('button', { name: 'Blocker' }).evaluate((element) => document.activeElement === element),
+      true,
+    );
+    assert.equal(fixture.puts.length, 0);
+    counters.scenarios += 1;
+  } finally {
+    await closeScenario(context, fixture);
+  }
+}
+
+async function assertMilestoneAppendReloadAndResponsiveFocus() {
+  const { context, page, fixture } = await openScenario({});
+  try {
+    await waitForSaveStatus(page, 'Saved');
+    const card = projectCard(page, 'Synthetic Workout Compass');
+    await card.getByRole('link', { name: 'Synthetic Workout Compass' }).first().click();
+    await page.getByRole('heading', { name: 'Notes', exact: true }).waitFor();
+    const opener = page.getByRole('button', { name: 'Add milestone' });
+    assert.ok(await opener.evaluate((element) => element.getBoundingClientRect().height >= 44));
+    await opener.click();
+    const input = page.getByRole('textbox', { name: 'Milestone' });
+    await assertLabeledInput(input, 'Milestone');
+    assert.equal(await input.getAttribute('maxlength'), '2000');
+    assert.equal(await rejectRawPaste(input, 'first\u2029second'), true);
+    const error = page.getByRole('alert');
+    await error.waitFor();
+    assert.equal(await input.inputValue(), '');
+    assert.equal(
+      await input.evaluate((element) => document.getElementById(element.getAttribute('aria-describedby'))?.getAttribute('role')),
+      'alert',
+    );
+
+    for (const width of [320, 390, 1440]) {
+      await assertPageFits(page, width, 'Project Detail milestone editor');
+    }
+    const text = `Release review ${'evidence '.repeat(160)}`;
+    await input.fill(text);
+    const before = fixture.workspace.projects[0];
+    const expectedDate = new Date().toISOString().slice(0, 10);
+    const responsePromise = waitForWorkspacePut(page);
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    assert.equal((await responsePromise).status(), 204);
+    await waitForSaveStatus(page, 'Saved');
+    const saved = fixture.workspace.projects.find((project) => project.id === 'target');
+    assert.equal(saved.notes_md, `Earlier notes\nMilestone ${expectedDate}: ${text.trim()}`);
+    assert.equal(saved.status, before.status);
+    assert.equal(saved.progress_pct, before.progress_pct);
+    assert.deepEqual(saved.steps, before.steps);
+    assert.equal(fixture.workspace.activity.length, 1);
+    assert.equal(fixture.workspace.activity[0].type, 'project_updated');
+    assert.equal(fixture.workspace.activity[0].projectId, 'target');
+    assert.equal(fixture.workspace.activity[0].message, 'Added milestone for “Synthetic Workout Compass”');
+    assert.equal(await opener.evaluate((element) => document.activeElement === element), true);
+
+    const putCount = fixture.puts.length;
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.getByRole('heading', { name: 'Notes', exact: true }).waitFor();
+    await waitForSaveStatus(page, 'Saved');
+    assert.equal(fixture.puts.length, putCount, 'acknowledged milestone reload does not write again');
+    assert.equal(await page.locator('.notes-area').inputValue(), saved.notes_md);
+    assert.equal((await readLocal(page)).projects.find((project) => project.id === 'target').notes_md, saved.notes_md);
+    await page.getByRole('button', { name: 'Add milestone' }).click();
+    await page.getByRole('textbox', { name: 'Milestone' }).press('Escape');
+    assert.equal(
+      await page.getByRole('button', { name: 'Add milestone' }).evaluate((element) => document.activeElement === element),
+      true,
+      'Escape restores milestone opener focus',
+    );
+    counters.scenarios += 1;
+  } finally {
+    await closeScenario(context, fixture);
+  }
+}
+
+async function assertMilestoneNotesCapKeepsDraft() {
+  const { context, page, fixture } = await openScenario({ notes: 'x'.repeat(199_999) });
+  try {
+    await waitForSaveStatus(page, 'Saved');
+    await projectCard(page, 'Synthetic Workout Compass')
+      .getByRole('link', { name: 'Synthetic Workout Compass' }).first().click();
+    await page.getByRole('button', { name: 'Add milestone' }).click();
+    const input = page.getByRole('textbox', { name: 'Milestone' });
+    await input.fill('One more note');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('alert').filter({ hasText: '200,000-character limit' }).waitFor();
+    assert.equal(await input.inputValue(), 'One more note', 'notes-cap rejection retains the draft');
+    assert.equal(fixture.puts.length, 0);
+    assert.equal(fixture.workspace.activity.length, 0);
+    assert.equal(fixture.workspace.projects[0].notes_md.length, 199_999);
+    assert.equal(await saveIndicator(page).textContent(), 'Remote save: Saved');
+    counters.scenarios += 1;
+  } finally {
+    await closeScenario(context, fixture);
+  }
+}
+
 const failures = [];
 async function run(name, callback) {
   try {
@@ -387,16 +788,25 @@ try {
     executablePath,
     args: ['--no-sandbox'],
   });
-  await run('delayed PUT refresh recovery', () => assertStarMutation({ firstPut: 'hold', refresh: true }));
-  await run('acknowledged star survives refresh', () => assertStarMutation({ refresh: true }));
-  await run('failed PUT recovers after refresh', () => assertStarMutation({ firstPut: 'fail', refresh: true }));
-  await run('step checkbox shares remote persistence', () => assertMutationSurvivesReload('checkbox'));
-  await run('blocker shares remote persistence', () => assertMutationSurvivesReload('blocker'));
-  await run('status shares remote persistence', () => assertMutationSurvivesReload('status'));
-  await run('stale ETag conflict never retries or overwrites', assertConflictDoesNotRetry);
-  await run('account switch to empty owner keeps cache private', assertAccountSwitchToEmptyDoesNotExposeCache);
-  await run('offline GET failure preserves unbound cache bytes', assertFailedGetPreservesUnboundCache);
-  await run('identical pending save remains bound to original owner', assertPendingSaveStaysWithOriginalOwner);
+  if (quickUpdatesOnly) {
+    await run('latest snapshot stays Saving across held A/B, then reports failure and recovers on reload', assertLatestSnapshotAcknowledgmentAndErrorRecovery);
+    await run('next-step no-op, stale-order draft retention, accessible focus and responsive layout', assertNextActionNoopStaleDraftAndResponsiveFocus);
+    await run('only one dashboard card editor is open at a time', assertOnlyOneDashboardCardEditor);
+    await run('milestone append, single activity, reload persistence, focus and responsive layout', assertMilestoneAppendReloadAndResponsiveFocus);
+    await run('milestone notes cap rejects without losing draft or writing', assertMilestoneNotesCapKeepsDraft);
+    await run('conflict is explicit and never retries', assertConflictDoesNotRetry);
+  } else {
+    await run('delayed PUT refresh recovery', () => assertStarMutation({ firstPut: 'hold', refresh: true }));
+    await run('acknowledged star survives refresh', () => assertStarMutation({ refresh: true }));
+    await run('failed PUT recovers after refresh', () => assertStarMutation({ firstPut: 'fail', refresh: true }));
+    await run('step checkbox shares remote persistence', () => assertMutationSurvivesReload('checkbox'));
+    await run('blocker shares remote persistence', () => assertMutationSurvivesReload('blocker'));
+    await run('status shares remote persistence', () => assertMutationSurvivesReload('status'));
+    await run('stale ETag conflict never retries or overwrites', assertConflictDoesNotRetry);
+    await run('account switch to empty owner keeps cache private', assertAccountSwitchToEmptyDoesNotExposeCache);
+    await run('offline GET failure preserves unbound cache bytes', assertFailedGetPreservesUnboundCache);
+    await run('identical pending save remains bound to original owner', assertPendingSaveStaysWithOriginalOwner);
+  }
   console.log(JSON.stringify({ counters, failures }, null, 2));
   if (failures.length) process.exitCode = 1;
 } catch (error) {

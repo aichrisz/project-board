@@ -3187,6 +3187,10 @@ a.link-chip-main:hover {
   min-height: 44px;
 }
 
+.card-next-action-edit {
+  min-height: 44px;
+}
+
 .card-blocker-error {
   flex: 0 0 100%;
   margin: 0;
@@ -3730,6 +3734,12 @@ a.link-chip-main:hover {
   margin: 0;
   padding: 0;
   border: 0;
+}
+
+.milestone-open,
+.milestone-editor input,
+.milestone-editor .btn {
+  min-height: 44px;
 }
 
 @media (min-width: 1024px) {

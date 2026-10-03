@@ -25,6 +25,51 @@ export function getNextAction(project: Project): Step | null {
   );
 }
 
+export type NextActionEditResult =
+  | { kind: 'changed'; project: Project }
+  | { kind: 'noop' | 'stale' }
+  | { kind: 'error'; reason: 'required' | 'line-break' | 'too-long' };
+
+export function editNextAction(
+  project: Project,
+  capturedStepId: string,
+  capturedTitle: string,
+  draft: string,
+  updatedAt: string,
+  capturedOrder: number,
+): NextActionEditResult {
+  const matchingSteps = project.steps.filter((step) => step.id === capturedStepId);
+  const capturedStep = matchingSteps[0];
+  if (
+    matchingSteps.length !== 1 ||
+    !capturedStep ||
+    capturedStep.done ||
+    capturedStep.title !== capturedTitle ||
+    capturedStep.order !== capturedOrder ||
+    getNextAction(project)?.id !== capturedStepId
+  ) {
+    return { kind: 'stale' };
+  }
+  if (/[\r\n\u2028\u2029]/.test(draft)) {
+    return { kind: 'error', reason: 'line-break' };
+  }
+  const title = draft.trim();
+  if (!title) return { kind: 'error', reason: 'required' };
+  if (title.length > 400) return { kind: 'error', reason: 'too-long' };
+  if (title === capturedStep.title) return { kind: 'noop' };
+
+  return {
+    kind: 'changed',
+    project: {
+      ...project,
+      steps: project.steps.map((step) =>
+        step.id === capturedStepId ? { ...step, title } : step,
+      ),
+      updated_at: updatedAt,
+    },
+  };
+}
+
 export function getBlocker(project: Project): string | null {
   for (const line of project.notes_md.split(/\r?\n/).reverse()) {
     const match = line.match(/^blocker:(.*)$/i);

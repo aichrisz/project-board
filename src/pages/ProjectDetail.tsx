@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import {
   FocusSessionDrawer,
@@ -56,6 +56,7 @@ export function ProjectDetail() {
     reorderSteps,
     setAllStepsDone,
     removeCompletedSteps,
+    addMilestone,
     settings,
     focus,
   } = useProjects();
@@ -66,7 +67,27 @@ export function ProjectDetail() {
   const [linkUrl, setLinkUrl] = useState('');
   const [undoToast, setUndoToast] = useState<UndoToast | null>(null);
   const [focusDrawerOpen, setFocusDrawerOpen] = useState(false);
+  const [milestoneOpen, setMilestoneOpen] = useState(false);
+  const [milestoneDraft, setMilestoneDraft] = useState('');
+  const [milestoneError, setMilestoneError] = useState<string | null>(null);
   const focusTriggerRef = useRef<HTMLElement | null>(null);
+  const milestoneInputRef = useRef<HTMLInputElement>(null);
+  const milestoneOpenerRef = useRef<HTMLButtonElement>(null);
+  const milestonePanelRef = useRef<HTMLElement>(null);
+  const restoreMilestoneFocusRef = useRef(false);
+  const milestoneEditorId = useId();
+
+  useEffect(() => {
+    if (milestoneOpen) {
+      milestoneInputRef.current?.focus();
+      return;
+    }
+    if (!restoreMilestoneFocusRef.current) return;
+    restoreMilestoneFocusRef.current = false;
+    const opener = milestoneOpenerRef.current;
+    if (opener?.isConnected) opener.focus();
+    else if (milestonePanelRef.current?.isConnected) milestonePanelRef.current.focus();
+  }, [milestoneOpen]);
 
   const dismissToast = useCallback(() => setUndoToast(null), []);
 
@@ -156,6 +177,31 @@ export function ProjectDetail() {
     if (!undoToast) return;
     updateProject(undoToast.projectId, { status: undoToast.previousStatus });
     setUndoToast(null);
+  }
+
+  function closeMilestoneEditor() {
+    restoreMilestoneFocusRef.current = true;
+    setMilestoneOpen(false);
+    setMilestoneDraft('');
+    setMilestoneError(null);
+  }
+
+  function submitMilestone(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const result = addMilestone(project!.id, milestoneDraft);
+    if (result.kind === 'changed') {
+      closeMilestoneEditor();
+      return;
+    }
+    const messages: Record<string, string> = {
+      required: 'Enter milestone text.',
+      'line-break': 'Milestone must fit on one line.',
+      'too-long': 'Milestone must be 2,000 characters or fewer.',
+      'notes-too-long': 'Project notes reached their 200,000-character limit. Milestone was not saved.',
+      missing: 'Project is no longer available. Draft remains open.',
+      'not-ready': 'Workspace is not ready. Draft remains open.',
+    };
+    setMilestoneError(messages[result.kind === 'error' ? result.reason : result.kind]);
   }
 
   return (
@@ -268,26 +314,87 @@ export function ProjectDetail() {
           />
         </section>
 
-          <section className="panel panel-wide detail-main-panel">
+          <section
+            ref={milestonePanelRef}
+            className="panel panel-wide detail-main-panel"
+            tabIndex={-1}
+          >
           <div className="panel-title-row">
             <h2 className="panel-title">Notes</h2>
-            <div className="segmented" role="group" aria-label="Notes mode">
+            <div className="card-quick-row">
+              <div className="segmented" role="group" aria-label="Notes mode">
+                <button
+                  type="button"
+                  className={`seg-btn ${notesMode === 'edit' ? 'active' : ''}`}
+                  onClick={() => setNotesMode('edit')}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className={`seg-btn ${notesMode === 'preview' ? 'active' : ''}`}
+                  onClick={() => setNotesMode('preview')}
+                >
+                  Preview
+                </button>
+              </div>
               <button
+                ref={milestoneOpenerRef}
                 type="button"
-                className={`seg-btn ${notesMode === 'edit' ? 'active' : ''}`}
-                onClick={() => setNotesMode('edit')}
+                className="btn btn-ghost btn-sm milestone-open"
+                onClick={() => {
+                  setMilestoneDraft('');
+                  setMilestoneError(null);
+                  setMilestoneOpen(true);
+                }}
               >
-                Edit
-              </button>
-              <button
-                type="button"
-                className={`seg-btn ${notesMode === 'preview' ? 'active' : ''}`}
-                onClick={() => setNotesMode('preview')}
-              >
-                Preview
+                Add milestone
               </button>
             </div>
           </div>
+          {milestoneOpen && (
+            <form
+              className="link-add milestone-editor"
+              onSubmit={submitMilestone}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  closeMilestoneEditor();
+                }
+              }}
+            >
+              <label className="field" htmlFor={`${milestoneEditorId}-input`}>
+                <span>Milestone</span>
+                <input
+                  ref={milestoneInputRef}
+                  id={`${milestoneEditorId}-input`}
+                  type="text"
+                  maxLength={2000}
+                  value={milestoneDraft}
+                  aria-describedby={milestoneError ? `${milestoneEditorId}-error` : undefined}
+                  onChange={(event) => {
+                    setMilestoneDraft(event.target.value);
+                    setMilestoneError(null);
+                  }}
+                  onPaste={(event) => {
+                    if (/[\r\n\u2028\u2029]/.test(event.clipboardData.getData('text'))) {
+                      event.preventDefault();
+                      setMilestoneError('Milestone must fit on one line.');
+                    }
+                  }}
+                />
+              </label>
+              {milestoneError && (
+                <p id={`${milestoneEditorId}-error`} className="card-blocker-error" role="alert">
+                  {milestoneError}
+                </p>
+              )}
+              <button type="submit" className="btn btn-secondary">Save</button>
+              <button type="button" className="btn btn-ghost milestone-cancel" onClick={closeMilestoneEditor}>
+                Cancel
+              </button>
+            </form>
+          )}
           {notesMode === 'edit' ? (
             <textarea
               className="notes-area"

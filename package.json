@@ -1,7 +1,7 @@
 {
   "name": "project-board",
   "private": true,
-  "version": "0.15.1",
+  "version": "0.16.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,6 +12,7 @@
     "test:server": "node --test server/app.test.mjs",
     "test:cli": "node --test scripts/project-board.test.mjs",
     "test:browser:persistence": "node scripts/project-board-persistence.browser.test.mjs",
+    "test:browser:quick-updates": "node scripts/project-board-persistence.browser.test.mjs --quick-updates",
     "start": "node server/app.mjs",
     "preview": "vite preview"
   },

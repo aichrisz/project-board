@@ -11,10 +11,12 @@ import { Link } from 'react-router';
 import type { Project } from '../types';
 import { ACTIVE_STATUSES, STATUS_LABELS, TYPE_LABELS } from '../types';
 import type { BlockerNoteResult } from '../lib/blocker';
+import type { NextActionEditResult } from '../lib/projectSignals';
 import { getBlocker, getFreshness, getNextAction } from '../lib/projectSignals';
 import { LinkChips } from './LinkChips';
 
 type BlockerUpdateResult = BlockerNoteResult | { kind: 'missing' | 'not-ready' };
+type NextActionUpdateResult = NextActionEditResult | { kind: 'missing' | 'not-ready' };
 
 type Props = {
   project: Project;
@@ -25,6 +27,16 @@ type Props = {
     projectId: string,
     text: string | null,
   ) => BlockerUpdateResult;
+  onUpdateNextAction: (
+    projectId: string,
+    stepId: string,
+    originalTitle: string,
+    originalOrder: number,
+    title: string,
+  ) => NextActionUpdateResult;
+  activeCardEditorProjectId: string | null;
+  onCardEditorOpen: (projectId: string) => void;
+  onCardEditorClose: (projectId: string) => void;
   onArchive: (id: string) => void;
   onDuplicate?: (id: string) => void;
   onStartFocus?: (id: string) => void;
@@ -35,6 +47,10 @@ export function ProjectCard({
   onToggleStar,
   onAddStep,
   onUpdateBlocker,
+  onUpdateNextAction,
+  activeCardEditorProjectId,
+  onCardEditorOpen,
+  onCardEditorClose,
   onArchive,
   onDuplicate,
   onStartFocus,
@@ -44,11 +60,23 @@ export function ProjectCard({
   const [editingBlocker, setEditingBlocker] = useState(false);
   const [blockerDraft, setBlockerDraft] = useState('');
   const [blockerError, setBlockerError] = useState<string | null>(null);
+  const [editingNextAction, setEditingNextAction] = useState(false);
+  const [nextActionDraft, setNextActionDraft] = useState('');
+  const [nextActionCapture, setNextActionCapture] = useState<{
+    id: string;
+    title: string;
+    order: number;
+  } | null>(null);
+  const [nextActionError, setNextActionError] = useState<string | null>(null);
   const blockerInputRef = useRef<HTMLInputElement>(null);
   const blockerOpenerRef = useRef<HTMLButtonElement>(null);
+  const nextActionInputRef = useRef<HTMLInputElement>(null);
+  const nextActionOpenerRef = useRef<HTMLButtonElement>(null);
   const cardRef = useRef<HTMLElement>(null);
   const restoreBlockerFocusRef = useRef(false);
+  const restoreNextActionFocusRef = useRef(false);
   const blockerEditorId = useId();
+  const nextActionEditorId = useId();
 
   useEffect(() => {
     if (editingBlocker) {
@@ -62,6 +90,31 @@ export function ProjectCard({
     else if (cardRef.current?.isConnected) cardRef.current.focus();
   }, [editingBlocker]);
 
+  useEffect(() => {
+    if (editingNextAction) {
+      nextActionInputRef.current?.focus();
+      return;
+    }
+    if (!restoreNextActionFocusRef.current) return;
+    restoreNextActionFocusRef.current = false;
+    const opener = nextActionOpenerRef.current;
+    if (opener?.isConnected) opener.focus();
+    else if (cardRef.current?.isConnected) cardRef.current.focus();
+  }, [editingNextAction]);
+
+  useEffect(() => {
+    if (activeCardEditorProjectId === project.id) return;
+    setAdding(false);
+    setStepDraft('');
+    setEditingBlocker(false);
+    setBlockerDraft('');
+    setBlockerError(null);
+    setEditingNextAction(false);
+    setNextActionDraft('');
+    setNextActionCapture(null);
+    setNextActionError(null);
+  }, [activeCardEditorProjectId, project.id]);
+
   function stop(e: MouseEvent | KeyboardEvent) {
     e.preventDefault();
     e.stopPropagation();
@@ -73,8 +126,13 @@ export function ProjectCard({
     const t = stepDraft.trim();
     if (!t) return;
     onAddStep(project.id, t);
+    closeStepEditor();
+  }
+
+  function closeStepEditor() {
     setStepDraft('');
     setAdding(false);
+    onCardEditorClose(project.id);
   }
 
   function closeBlockerEditor() {
@@ -82,11 +140,17 @@ export function ProjectCard({
     setEditingBlocker(false);
     setBlockerDraft('');
     setBlockerError(null);
+    onCardEditorClose(project.id);
   }
 
   function startBlockerEdit() {
+    onCardEditorOpen(project.id);
     setAdding(false);
     setStepDraft('');
+    setEditingNextAction(false);
+    setNextActionDraft('');
+    setNextActionCapture(null);
+    setNextActionError(null);
     setBlockerDraft(getBlocker(project) ?? '');
     setBlockerError(null);
     setEditingBlocker(true);
@@ -121,9 +185,71 @@ export function ProjectCard({
     }
   }
 
+  function closeNextActionEditor() {
+    restoreNextActionFocusRef.current = true;
+    setEditingNextAction(false);
+    setNextActionDraft('');
+    setNextActionCapture(null);
+    setNextActionError(null);
+    onCardEditorClose(project.id);
+  }
+
+  function startNextActionEdit() {
+    const currentNextAction = getNextAction(project);
+    if (!currentNextAction) return;
+    onCardEditorOpen(project.id);
+    setAdding(false);
+    setStepDraft('');
+    setEditingBlocker(false);
+    setBlockerDraft('');
+    setBlockerError(null);
+    setNextActionDraft(currentNextAction.title);
+    setNextActionCapture({
+      id: currentNextAction.id,
+      title: currentNextAction.title,
+      order: currentNextAction.order,
+    });
+    setNextActionError(null);
+    setEditingNextAction(true);
+  }
+
+  function showNextActionResult(result: NextActionUpdateResult): boolean {
+    if (result.kind === 'changed' || result.kind === 'noop') return true;
+    const messages: Record<string, string> = {
+      required: 'Enter a next step title.',
+      'line-break': 'Next step title must fit on one line.',
+      'too-long': 'Next step title must be 400 characters or fewer.',
+      stale: 'Next step changed while editing. Draft remains open.',
+      missing: 'Project is no longer available. Draft remains open.',
+      'not-ready': 'Workspace is not ready. Draft remains open.',
+    };
+    setNextActionError(messages[result.kind === 'error' ? result.reason : result.kind]);
+    return false;
+  }
+
+  function submitNextAction(e: FormEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!nextActionCapture) return;
+    if (
+      showNextActionResult(
+        onUpdateNextAction(
+          project.id,
+          nextActionCapture.id,
+          nextActionCapture.title,
+          nextActionCapture.order,
+          nextActionDraft,
+        ),
+      )
+    ) {
+      closeNextActionEditor();
+    }
+  }
+
   const canArchive = project.status !== 'archived';
   const canStartFocus = ACTIVE_STATUSES.includes(project.status);
   const nextAction = getNextAction(project);
+  const isActiveCardEditor = activeCardEditorProjectId === project.id;
   const freshness = getFreshness(project);
   const blocker = getBlocker(project);
 
@@ -209,7 +335,7 @@ export function ProjectCard({
       )}
 
       <div className="card-quick">
-        {editingBlocker ? (
+        {editingBlocker && isActiveCardEditor ? (
           <form
             className="card-blocker-editor"
             onSubmit={submitBlocker}
@@ -271,7 +397,58 @@ export function ProjectCard({
               )}
             </div>
           </form>
-        ) : adding ? (
+        ) : editingNextAction && isActiveCardEditor ? (
+          <form
+            className="card-blocker-editor card-next-step-editor"
+            onSubmit={submitNextAction}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                closeNextActionEditor();
+              }
+              event.stopPropagation();
+            }}
+          >
+            <label htmlFor={`${nextActionEditorId}-input`}>Next step</label>
+            <input
+              ref={nextActionInputRef}
+              id={`${nextActionEditorId}-input`}
+              type="text"
+              maxLength={400}
+              value={nextActionDraft}
+              aria-describedby={nextActionError ? `${nextActionEditorId}-error` : undefined}
+              onChange={(event) => {
+                setNextActionDraft(event.target.value);
+                setNextActionError(null);
+              }}
+              onPaste={(event) => {
+                if (/[\r\n\u2028\u2029]/.test(event.clipboardData.getData('text'))) {
+                  event.preventDefault();
+                  setNextActionError('Next step title must fit on one line.');
+                }
+              }}
+              onClick={(event) => event.stopPropagation()}
+            />
+            {nextActionError && (
+              <p id={`${nextActionEditorId}-error`} className="card-blocker-error" role="alert">
+                {nextActionError}
+              </p>
+            )}
+            <div className="card-blocker-actions">
+              <button type="submit" className="btn btn-secondary btn-sm">Save</button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={(event) => {
+                  stop(event);
+                  closeNextActionEditor();
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : adding && isActiveCardEditor ? (
           <form className="card-step-add" onSubmit={submitStep}>
             <input
               type="text"
@@ -284,8 +461,7 @@ export function ProjectCard({
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
                   e.preventDefault();
-                  setAdding(false);
-                  setStepDraft('');
+                  closeStepEditor();
                 }
               }}
             />
@@ -301,8 +477,7 @@ export function ProjectCard({
               className="btn btn-ghost btn-sm"
               onClick={(e) => {
                 stop(e);
-                setAdding(false);
-                setStepDraft('');
+                closeStepEditor();
               }}
             >
               Cancel
@@ -310,6 +485,19 @@ export function ProjectCard({
           </form>
         ) : (
           <div className="card-quick-row">
+            {nextAction && (
+              <button
+                ref={nextActionOpenerRef}
+                type="button"
+                className="btn btn-ghost btn-sm card-next-action-edit"
+                onClick={(event) => {
+                  stop(event);
+                  startNextActionEdit();
+                }}
+              >
+                Edit next step
+              </button>
+            )}
             {onStartFocus && canStartFocus && (
               <button
                 type="button"
@@ -338,6 +526,12 @@ export function ProjectCard({
               className="btn btn-ghost btn-sm"
               onClick={(e) => {
                 stop(e);
+                onCardEditorOpen(project.id);
+                setEditingBlocker(false);
+                setEditingNextAction(false);
+                setNextActionDraft('');
+                setNextActionCapture(null);
+                setNextActionError(null);
                 setAdding(true);
               }}
             >
